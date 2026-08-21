@@ -1,0 +1,10 @@
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*.zip
+*.bak
+.vscode/
+.idea/
+.cursor/
