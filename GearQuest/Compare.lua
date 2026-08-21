@@ -17,13 +17,26 @@ local function GetItemLevel(itemLinkOrId)
 end
 
 function GQ.Compare:GetEquippedItemLevel(slotName)
-    local invSlot = GQ.Data:GetInventorySlot(slotName)
-    if not invSlot then
+    local invSlots = GQ.Data:GetInventorySlots(slotName)
+    if #invSlots == 0 then
         return 0
     end
 
-    local link = GetInventoryItemLink("player", invSlot)
-    return GetItemLevel(link)
+    if #invSlots == 1 then
+        local link = GetInventoryItemLink("player", invSlots[1])
+        return GetItemLevel(link)
+    end
+
+    -- Rings/trinkets: compare against the weaker equipped slot.
+    local lowestIlvl
+    for _, invSlot in ipairs(invSlots) do
+        local ilvl = GetItemLevel(GetInventoryItemLink("player", invSlot))
+        if lowestIlvl == nil or ilvl < lowestIlvl then
+            lowestIlvl = ilvl
+        end
+    end
+
+    return lowestIlvl or 0
 end
 
 function GQ.Compare:ScoreEntry(entry, equippedIlvl)
@@ -35,6 +48,8 @@ function GQ.Compare:ScoreEntry(entry, equippedIlvl)
     if entry.sourceType == "quest_reward" then
         sourceBonus = 2
     elseif entry.sourceType == "boss_drop" then
+        sourceBonus = 1
+    elseif entry.sourceType == "vendor" then
         sourceBonus = 1
     end
 

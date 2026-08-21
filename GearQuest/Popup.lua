@@ -8,6 +8,45 @@ local SLOT_GAP = 4
 local BAR_PAD = 5
 local DEFAULT_ICON_SIZE = 37
 
+local function ShowUpgradeTooltip(button)
+    if not button.entry then
+        return
+    end
+
+    local gq = _G.GearQuest
+    GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+    GameTooltip:SetHyperlink("item:" .. button.entry.itemId)
+    GameTooltip:AddLine(" ")
+    if gq then
+        GameTooltip:AddLine(gq:GetSourceLabel(button.entry.sourceType), 1, 1, 1)
+    end
+    GameTooltip:AddLine("Left-click to see more details.", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end
+
+local function OpenUpgradeInLog(button)
+    if not button or not button.entry then
+        return
+    end
+
+    local entryId = button.entry.id
+    local gq = _G.GearQuest
+    if not gq or not gq.Log or not gq.Popup or not entryId then
+        return
+    end
+
+    gq.Popup:Hide()
+    gq.Log:Show()
+    gq.Log:SelectHunt(entryId)
+end
+
+local function OnUpgradeIconClick(self, mouseButton)
+    if mouseButton == "RightButton" then
+        return
+    end
+    OpenUpgradeInLog(self)
+end
+
 local function GetSlotIconSize(slotButton)
     local size = slotButton and math.floor(slotButton:GetWidth() + 0.5) or 0
     if size < 1 then
@@ -37,36 +76,64 @@ local function CreateUpgradeIcon(parent, index)
     btn.highlight:SetAllPoints()
     btn.highlight:SetColorTexture(1, 1, 1, 0.18)
 
+    if btn.RegisterForClicks then
+        pcall(function() btn:RegisterForClicks("LeftButtonUp", "RightButtonUp") end)
+    end
+
     btn:SetScript("OnEnter", function(self)
-        if not self.entry then
-            return
-        end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetHyperlink("item:" .. self.entry.itemId)
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine(GQ:GetSourceTag(self.entry.sourceType), 1, 1, 1)
-        GameTooltip:AddLine("Click to track this upgrade in GearQuest.", 0.7, 0.7, 0.7)
-        GameTooltip:Show()
+        ShowUpgradeTooltip(self)
     end)
 
     btn:SetScript("OnLeave", function()
         GameTooltip:Hide()
     end)
 
-    btn:SetScript("OnClick", function(self)
-        if not self.entry then
-            return
-        end
-        GQ.Log:ActivateHunt(self.entry.id)
-        GQ.Popup:Hide()
-        GQ.Log:Show()
-        GQ.Log:SelectHunt(self.entry.id)
-    end)
+    btn:SetScript("OnClick", OnUpgradeIconClick)
 
     return btn
 end
 
+function GQ.Popup:WireIconScripts()
+    if not self.container or not self.container.icons then
+        return
+    end
+
+    for i = 1, MAX_OPTIONS do
+        local icon = self.container.icons[i]
+        if icon then
+            if icon.RegisterForClicks then
+                icon:RegisterForClicks("LeftButtonUp")
+            end
+            icon:SetScript("OnEnter", function(self)
+                ShowUpgradeTooltip(self)
+            end)
+            icon:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
+            icon:SetScript("OnClick", OnUpgradeIconClick)
+        end
+    end
+end
+
 function GQ.Popup:Init()
+    if self.initialized then
+        return
+    end
+    self.initialized = true
+
+    if _G.GearQuestSlotPopup then
+        self.container = _G.GearQuestSlotPopup
+        self.container.bar = self.container.bar or _G.GearQuestUpgradeBar
+        if not self.container.icons then
+            self.container.icons = {}
+            for i = 1, MAX_OPTIONS do
+                self.container.icons[i] = _G["GearQuestUpgradeIcon" .. i]
+            end
+        end
+        self:WireIconScripts()
+        return
+    end
+
     local parent = CharacterFrame or UIParent
     local container = CreateFrame("Frame", "GearQuestSlotPopup", parent)
     container:SetFrameStrata("HIGH")
@@ -108,16 +175,23 @@ function GQ.Popup:Init()
     local refreshFrame = CreateFrame("Frame")
     refreshFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     refreshFrame:SetScript("OnEvent", function()
-        if GQ.Popup.container:IsShown() then
-            GQ.Popup:RefreshIcons()
+        local popup = _G.GearQuest and _G.GearQuest.Popup
+        if popup and popup.container and popup.container:IsShown() then
+            popup:RefreshIcons()
         end
     end)
 
-    if CharacterFrame and CharacterFrame.HookScript then
+    if CharacterFrame and CharacterFrame.HookScript and not CharacterFrame.GearQuestOnHideHooked then
+        CharacterFrame.GearQuestOnHideHooked = true
         CharacterFrame:HookScript("OnHide", function()
-            GQ.Popup:Hide()
+            local popup = _G.GearQuest and _G.GearQuest.Popup
+            if popup then
+                popup:Hide()
+            end
         end)
     end
+
+    self:WireIconScripts()
 end
 
 function GQ.Popup:PositionBar(slotButton, count)
@@ -168,6 +242,10 @@ function GQ.Popup:RefreshIcons()
 end
 
 function GQ.Popup:Hide()
+    if not self.container then
+        return
+    end
+
     self.container:Hide()
     self.container.bar:Hide()
     for i = 1, MAX_OPTIONS do
@@ -181,12 +259,12 @@ function GQ.Popup:Hide()
 end
 
 function GQ.Popup:ShowForSlot(slotName, slotButton)
-    if self.activeSlotName == slotName and self.container:IsShown() then
-        self:Hide()
+    if not self.container then
         return
     end
 
-    local slotLabel = slotName:gsub("(%l)(%u)", "%1 %2")
+    slotName = GQ.Data:NormalizeSlotName(slotName)
+    local slotLabel = GQ.Data:SlotLabel(slotName)
     local candidates = GQ.Data:GetCandidatesForSlot(slotName)
     local upgrades = select(1, GQ.Compare:RankEntries(candidates, slotName, MAX_OPTIONS))
 

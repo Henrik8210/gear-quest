@@ -44,17 +44,17 @@ function GQ.Commands:Init()
             GQ.Preview:HandleCommand(lower)
         elseif lower == "log" then
             GQ.Log:Toggle()
-        elseif lower == "complete" then
+        elseif lower == "track" then
             if GQ.Log.selectedHuntId then
-                GQ.Log:CompleteHunt(GQ.Log.selectedHuntId)
+                GQ.Log:TrackHunt(GQ.Log.selectedHuntId)
             else
-                print("|cff66ccffGearQuest|r: No hunt selected. Open |cff00ff00/gq log|r and pick one.")
+                print("|cff66ccffGearQuest|r: No upgrade selected. Open |cff00ff00/gq log|r and pick one.")
             end
-        elseif lower == "abandon" then
+        elseif lower == "untrack" then
             if GQ.Log.selectedHuntId then
-                GQ.Log:AbandonHunt(GQ.Log.selectedHuntId)
+                GQ.Log:UntrackHunt(GQ.Log.selectedHuntId)
             else
-                print("|cff66ccffGearQuest|r: No hunt selected.")
+                print("|cff66ccffGearQuest|r: No upgrade selected.")
             end
         elseif lower == "help" then
             GQ.Preview:PrintHelp()

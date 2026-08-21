@@ -17,8 +17,18 @@ local HEADER_OFFSET = 74
 local FOOTER_OFFSET = 48
 local CONTENT_HEIGHT = FRAME_HEIGHT - HEADER_OFFSET - FOOTER_OFFSET
 local LIST_SECTION_HEIGHT = math.floor(CONTENT_HEIGHT * 0.40)
+local CONTENT_LEFT = 4
+local CONTENT_RIGHT_GUTTER = 30
+local PANEL_WIDTH = FRAME_WIDTH - CONTENT_LEFT - CONTENT_RIGHT_GUTTER
+local PANEL_INSET = 2
+local GUTTER_INSET = 6
+local SECTION_DIVIDER_HEIGHT = 3
+local METAL_EDGE = "Interface\\Tooltips\\UI-Tooltip-Border"
 local DETAIL_TEXT_COLOR = { 0.13, 0.09, 0.04 }
 local DETAIL_TEXT_HEX = "21160a"
+local QUEST_DETAIL_TITLE_FONTS = {
+    "QuestFont_Large", "GameFontHighlightLarge", "GameFontNormalLarge",
+}
 
 local function GetHuntRecord(id)
     GearQuestDB.hunts = GearQuestDB.hunts or {}
@@ -29,11 +39,18 @@ local function EnsureHuntRecord(id)
     GearQuestDB.hunts = GearQuestDB.hunts or {}
     if not GearQuestDB.hunts[id] then
         GearQuestDB.hunts[id] = {
-            status = "active",
-            acceptedAt = time(),
+            status = "tracked",
+            trackedAt = time(),
         }
     end
     return GearQuestDB.hunts[id]
+end
+
+local function NormalizeHuntStatus(status)
+    if status == "active" then
+        return "tracked"
+    end
+    return status
 end
 
 local function GetHuntStatus(id)
@@ -41,7 +58,61 @@ local function GetHuntStatus(id)
     if not record then
         return "available"
     end
-    return record.status or "active"
+    return NormalizeHuntStatus(record.status or "tracked")
+end
+
+local function ItemLinkToId(link)
+    if not link then
+        return nil
+    end
+    return tonumber(link:match("item:(%d+)"))
+end
+
+local function GetBagItemLink(bag, slot)
+    if C_Container and C_Container.GetContainerItemLink then
+        return C_Container.GetContainerItemLink(bag, slot)
+    end
+    if GetContainerItemLink then
+        return GetContainerItemLink(bag, slot)
+    end
+end
+
+local function GetBagSlotCount(bag)
+    if C_Container and C_Container.GetContainerNumSlots then
+        return C_Container.GetContainerNumSlots(bag) or 0
+    end
+    if GetContainerNumSlots then
+        return GetContainerNumSlots(bag) or 0
+    end
+    return 0
+end
+
+local function PlayerOwnsItem(itemId)
+    if not itemId then
+        return false
+    end
+
+    local ok, owned = pcall(function()
+        for invSlot = 1, 19 do
+            if ItemLinkToId(GetInventoryItemLink("player", invSlot)) == itemId then
+                return true
+            end
+        end
+
+        local numBags = NUM_BAG_SLOTS or 4
+        for bag = 0, numBags do
+            local numSlots = GetBagSlotCount(bag)
+            for slot = 1, numSlots do
+                if ItemLinkToId(GetBagItemLink(bag, slot)) == itemId then
+                    return true
+                end
+            end
+        end
+
+        return false
+    end)
+
+    return ok and owned or false
 end
 
 local function CreateFontStringWithFallback(parent, candidates)
@@ -78,14 +149,46 @@ local function ApplyBlackBackground(parent)
     parent.blackBg = bg
 end
 
+local function ApplyMetalEdge(frame, edgeSize)
+    if not frame or not frame.SetBackdrop then
+        return
+    end
+    frame:SetBackdrop({
+        edgeFile = METAL_EDGE,
+        tile = true,
+        tileSize = 16,
+        edgeSize = edgeSize or 12,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+end
+
+local function CreateSectionDivider(parent)
+    local divider = CreateFrame("Frame", nil, parent)
+    divider:SetHeight(SECTION_DIVIDER_HEIGHT)
+
+    local top = divider:CreateTexture(nil, "ARTWORK")
+    top:SetPoint("TOPLEFT", divider, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", divider, "TOPRIGHT", 0, 0)
+    top:SetHeight(1)
+    top:SetColorTexture(0.62, 0.54, 0.36, 1)
+
+    local bottom = divider:CreateTexture(nil, "ARTWORK")
+    bottom:SetPoint("BOTTOMLEFT", divider, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", divider, "BOTTOMRIGHT", 0, 0)
+    bottom:SetHeight(1)
+    bottom:SetColorTexture(0.22, 0.19, 0.14, 1)
+
+    return divider
+end
+
 local function EnableClipping(frame)
     if frame and frame.SetClipsChildren then
         frame:SetClipsChildren(true)
     end
 end
 
-local function ConfigurePanelScrollBar(scroll, show)
-    if not scroll or not scroll.GetName then
+local function ConfigurePanelScrollBar(scroll, gutterFrame, mainFrame)
+    if not scroll or not scroll.GetName or not gutterFrame then
         return
     end
     local scrollBar = _G[scroll:GetName() .. "ScrollBar"]
@@ -93,13 +196,12 @@ local function ConfigurePanelScrollBar(scroll, show)
         return
     end
     scrollBar:ClearAllPoints()
-    scrollBar:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", 2, -16)
-    scrollBar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 2, 16)
-    if show then
-        scrollBar:Show()
-    else
-        scrollBar:Hide()
+    scrollBar:SetPoint("TOPLEFT", gutterFrame, "TOPLEFT", 0, -16)
+    scrollBar:SetPoint("BOTTOMRIGHT", gutterFrame, "BOTTOMRIGHT", 0, 16)
+    if mainFrame and mainFrame.GetFrameLevel then
+        scrollBar:SetFrameLevel(mainFrame:GetFrameLevel() + 20)
     end
+    scrollBar:Show()
 end
 
 local function CreatePanelScrollFrame(name, parent)
@@ -107,7 +209,6 @@ local function CreatePanelScrollFrame(name, parent)
     if not scrollOk or not scroll then
         scroll = CreateFrame("ScrollFrame", name, parent)
     end
-    EnableClipping(scroll)
 
     local scrollName = scroll:GetName()
     if scrollName then
@@ -246,6 +347,7 @@ local function SetupQuestLogPortrait(frame)
 end
 
 function GQ.Log:IsSlotCollapsed(slotName)
+    slotName = GQ.Data:NormalizeSlotName(slotName)
     GearQuestDB.ui = GearQuestDB.ui or {}
     GearQuestDB.ui.collapsedSlots = GearQuestDB.ui.collapsedSlots or {}
 
@@ -253,12 +355,27 @@ function GQ.Log:IsSlotCollapsed(slotName)
         return GearQuestDB.ui.collapsedSlots[slotName]
     end
 
-    -- Empty slots start collapsed so the list fits the upper pane.
+    -- Migrate saved collapse state from old duplicate categories.
+    if slotName == "Finger" then
+        for _, legacy in ipairs({ "Finger0", "Finger1" }) do
+            if GearQuestDB.ui.collapsedSlots[legacy] ~= nil then
+                return GearQuestDB.ui.collapsedSlots[legacy]
+            end
+        end
+    elseif slotName == "Trinket" then
+        for _, legacy in ipairs({ "Trinket0", "Trinket1" }) do
+            if GearQuestDB.ui.collapsedSlots[legacy] ~= nil then
+                return GearQuestDB.ui.collapsedSlots[legacy]
+            end
+        end
+    end
+
     local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, 1)
-    return #upgrades == 0
+    return #upgrades == 0 and #self:GetSlotListEntries(slotName) == 0
 end
 
 function GQ.Log:SetSlotCollapsed(slotName, collapsed)
+    slotName = GQ.Data:NormalizeSlotName(slotName)
     GearQuestDB.ui = GearQuestDB.ui or {}
     GearQuestDB.ui.collapsedSlots = GearQuestDB.ui.collapsedSlots or {}
     GearQuestDB.ui.collapsedSlots[slotName] = collapsed
@@ -269,15 +386,47 @@ function GQ.Log:ToggleSlotCollapsed(slotName)
     self:Refresh()
 end
 
-function GQ.Log:ActivateHunt(id)
+function GQ.Log:GetSlotListEntries(slotName)
+    local results = {}
+    local seen = {}
+
+    for _, entry in ipairs(GQ.Data:GetTopUpgradesForSlot(slotName, 3)) do
+        seen[entry.id] = true
+        table.insert(results, entry)
+    end
+
+    for id, record in pairs(GearQuestDB.hunts or {}) do
+        if not seen[id] then
+            local status = NormalizeHuntStatus(record.status)
+            if status == "tracked" or status == "completed" then
+                local entry = GQ.Data:GetEntryById(id)
+                if entry and GQ.Data:EntryMatchesSlot(entry, slotName) and GQ.Data:EntryMatchesPlayer(entry) then
+                    seen[id] = true
+                    table.insert(results, entry)
+                end
+            end
+        end
+    end
+
+    return results
+end
+
+function GQ.Log:TrackHunt(id)
     local entry = GQ.Data:GetEntryById(id)
     if not entry then
         return
     end
 
-    EnsureHuntRecord(id)
-    print("|cff66ccffGearQuest|r: Hunt accepted — " .. (GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)))
+    local record = EnsureHuntRecord(id)
+    record.status = "tracked"
+    record.trackedAt = time()
+    print("|cff66ccffGearQuest|r: Tracking — " .. (GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)))
+    self:CheckAutoCompletion()
     self:Refresh()
+end
+
+function GQ.Log:ActivateHunt(id)
+    self:TrackHunt(id)
 end
 
 function GQ.Log:CompleteHunt(id)
@@ -289,13 +438,54 @@ function GQ.Log:CompleteHunt(id)
     end
 end
 
-function GQ.Log:AbandonHunt(id)
+function GQ.Log:UntrackHunt(id)
     GearQuestDB.hunts[id] = nil
     if self.selectedHuntId == id then
         self.selectedHuntId = nil
         self:ClearDetail()
     end
     self:Refresh()
+end
+
+function GQ.Log:AbandonHunt(id)
+    self:UntrackHunt(id)
+end
+
+function GQ.Log:CheckAutoCompletion()
+    local changed = false
+
+    for id, record in pairs(GearQuestDB.hunts or {}) do
+        if NormalizeHuntStatus(record.status) == "tracked" then
+            local entry = GQ.Data:GetEntryById(id)
+            if entry and PlayerOwnsItem(entry.itemId) then
+                record.status = "completed"
+                record.completedAt = time()
+                changed = true
+                local itemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
+                print("|cff66ccffGearQuest|r: Completed — " .. itemName .. " obtained.")
+            end
+        end
+    end
+
+    if changed and self.frame and self.frame:IsShown() then
+        self:Refresh()
+    end
+end
+
+function GQ.Log:ScheduleAutoCompletionCheck()
+    if self.completionPending then
+        return
+    end
+    self.completionPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.25, function()
+            GQ.Log.completionPending = false
+            GQ.Log:CheckAutoCompletion()
+        end)
+    else
+        self.completionPending = false
+        self:CheckAutoCompletion()
+    end
 end
 
 function GQ.Log:CreateListRow(index)
@@ -335,7 +525,70 @@ function GQ.Log:CreateListRow(index)
     return row
 end
 
+function GQ.Log:EnsureTrackerEvents()
+    if self.trackerFrame then
+        return
+    end
+
+    local tracker = CreateFrame("Frame")
+    tracker:RegisterEvent("BAG_UPDATE")
+    tracker:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+    tracker:SetScript("OnEvent", function()
+        local log = _G.GearQuest and _G.GearQuest.Log
+        if log then
+            log:ScheduleAutoCompletionCheck()
+        end
+    end)
+    self.trackerFrame = tracker
+end
+
+function GQ.Log:WireControls(frame)
+    frame.trackBtn:SetScript("OnClick", function()
+        local log = _G.GearQuest and _G.GearQuest.Log
+        if log and log.selectedHuntId then
+            log:TrackHunt(log.selectedHuntId)
+        end
+    end)
+
+    frame.untrackBtn:SetScript("OnClick", function()
+        local log = _G.GearQuest and _G.GearQuest.Log
+        if log and log.selectedHuntId then
+            log:UntrackHunt(log.selectedHuntId)
+        end
+    end)
+
+    frame.exitBtn:SetScript("OnClick", function()
+        local log = _G.GearQuest and _G.GearQuest.Log
+        if log then
+            log:Hide()
+        end
+    end)
+end
+
+function GQ.Log:BindExistingFrame(frame)
+    self.frame = frame
+    self.listRows = {}
+    self.selectedHuntId = nil
+    frame.scroll = frame.scroll or _G.GearQuestLogListScrollFrame
+    frame.scrollChild = frame.scrollChild or _G.GearQuestLogListScrollChild
+    frame.detailScroll = frame.detailScroll or _G.GearQuestLogDetailScrollFrame
+    frame.detailChild = frame.detailChild or _G.GearQuestLogDetailScrollChild
+    if frame.trackBtn and frame.untrackBtn and frame.exitBtn then
+        self:WireControls(frame)
+    end
+    self:EnsureTrackerEvents()
+end
+
 function GQ.Log:Init()
+    if self.frame then
+        return
+    end
+
+    if _G.GearQuestLogFrame then
+        self:BindExistingFrame(_G.GearQuestLogFrame)
+        return
+    end
+
     local ok, frame = pcall(CreateFrame, "Frame", "GearQuestLogFrame", UIParent, "PortraitFrameTemplate")
     if not ok or not frame then
         frame = CreateFrame("Frame", "GearQuestLogFrame", UIParent)
@@ -366,57 +619,63 @@ function GQ.Log:Init()
     SetupQuestLogPortrait(frame)
 
     frame.listInset = CreateFrame("Frame", nil, frame)
-    frame.listInset:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -HEADER_OFFSET)
-    frame.listInset:SetSize(FRAME_WIDTH - 18 - 28, LIST_SECTION_HEIGHT)
-    EnableClipping(frame.listInset)
+    frame.listInset:SetPoint("TOPLEFT", frame, "TOPLEFT", CONTENT_LEFT, -HEADER_OFFSET)
+    frame.listInset:SetSize(PANEL_WIDTH, LIST_SECTION_HEIGHT)
     ApplyBlackBackground(frame.listInset)
-    if frame.listInset.SetBackdrop then
-        frame.listInset:SetBackdrop({
-            bgFile = nil,
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true,
-            tileSize = 16,
-            edgeSize = 16,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        })
-    end
+    ApplyMetalEdge(frame.listInset, 12)
 
-    frame.scroll = CreatePanelScrollFrame("GearQuestLogListScrollFrame", frame.listInset)
-    frame.scroll:SetPoint("TOPLEFT", frame.listInset, "TOPLEFT", 6, -6)
-    frame.scroll:SetPoint("BOTTOMRIGHT", frame.listInset, "BOTTOMRIGHT", -24, 6)
+    frame.scroll = CreatePanelScrollFrame("GearQuestLogListScrollFrame", frame)
+    frame.scroll:SetPoint("TOPLEFT", frame.listInset, "TOPLEFT", PANEL_INSET, -PANEL_INSET)
+    frame.scroll:SetPoint("BOTTOMRIGHT", frame.listInset, "BOTTOMRIGHT", 0, PANEL_INSET)
 
     frame.scrollChild = CreateFrame("Frame", "GearQuestLogListScrollChild", frame.scroll)
-    frame.scrollChild:SetWidth(300)
+    frame.scrollChild:SetWidth(PANEL_WIDTH - PANEL_INSET)
     frame.scrollChild:SetHeight(1)
     frame.scroll:SetScrollChild(frame.scrollChild)
 
+    frame.listGutter = CreateFrame("Frame", nil, frame)
+    frame.listGutter:SetPoint("TOPLEFT", frame.listInset, "TOPRIGHT", 0, 0)
+    frame.listGutter:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -GUTTER_INSET, -(HEADER_OFFSET + LIST_SECTION_HEIGHT))
+
+    frame.sectionDivider = CreateSectionDivider(frame)
+    frame.sectionDivider:SetPoint("TOPLEFT", frame.listInset, "BOTTOMLEFT", 0, 0)
+    frame.sectionDivider:SetPoint("TOPRIGHT", frame.listInset, "BOTTOMRIGHT", 0, 0)
+
     frame.detailBg = CreateFrame("Frame", nil, frame)
-    frame.detailBg:SetPoint("TOPLEFT", frame.listInset, "BOTTOMLEFT", 0, -4)
-    frame.detailBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -28, FOOTER_OFFSET)
+    frame.detailBg:SetPoint("TOPLEFT", frame.sectionDivider, "BOTTOMLEFT", 0, 0)
+    frame.detailBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -CONTENT_RIGHT_GUTTER, FOOTER_OFFSET)
     EnableClipping(frame.detailBg)
     ApplyParchmentBackground(frame.detailBg)
+    ApplyMetalEdge(frame.detailBg, 12)
 
-    frame.detailScroll = CreatePanelScrollFrame("GearQuestLogDetailScrollFrame", frame.detailBg)
-    frame.detailScroll:SetPoint("TOPLEFT", frame.detailBg, "TOPLEFT", 8, -8)
-    frame.detailScroll:SetPoint("BOTTOMRIGHT", frame.detailBg, "BOTTOMRIGHT", -24, 8)
+    frame.detailScroll = CreatePanelScrollFrame("GearQuestLogDetailScrollFrame", frame)
+    frame.detailScroll:SetPoint("TOPLEFT", frame.detailBg, "TOPLEFT", PANEL_INSET, -PANEL_INSET)
+    frame.detailScroll:SetPoint("BOTTOMRIGHT", frame.detailBg, "BOTTOMRIGHT", 0, PANEL_INSET)
     frame.detailScroll:SetFrameLevel(frame.detailBg:GetFrameLevel() + 2)
 
     frame.detailChild = CreateFrame("Frame", "GearQuestLogDetailScrollChild", frame.detailScroll)
-    frame.detailChild:SetWidth(260)
+    frame.detailChild:SetWidth(PANEL_WIDTH - PANEL_INSET - 8)
     frame.detailScroll:SetScrollChild(frame.detailChild)
 
-    frame.detailTitle = CreateFontStringWithFallback(frame.detailChild, {
-        "QuestFont", "GameFontHighlight", "GameFontNormal",
-    })
+    frame.detailGutter = CreateFrame("Frame", nil, frame)
+    frame.detailGutter:SetPoint("TOPLEFT", frame.detailBg, "TOPRIGHT", 0, 0)
+    frame.detailGutter:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -GUTTER_INSET, FOOTER_OFFSET)
+
+    ConfigurePanelScrollBar(frame.scroll, frame.listGutter, frame)
+    ConfigurePanelScrollBar(frame.detailScroll, frame.detailGutter, frame)
+
+    frame.detailTitle = CreateFontStringWithFallback(frame.detailChild, QUEST_DETAIL_TITLE_FONTS)
     frame.detailTitle:SetPoint("TOPLEFT", frame.detailChild, "TOPLEFT", 8, -8)
     frame.detailTitle:SetPoint("RIGHT", frame.detailChild, "RIGHT", -8, 0)
     frame.detailTitle:SetJustifyH("LEFT")
     frame.detailTitle:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
+    frame.detailTitle:Hide()
 
-    frame.detailHeader = CreateFontStringWithFallback(frame.detailChild, { "GameFontNormal" })
-    frame.detailHeader:SetPoint("TOPLEFT", frame.detailTitle, "BOTTOMLEFT", 0, -12)
+    frame.detailHeader = CreateFontStringWithFallback(frame.detailChild, QUEST_DETAIL_TITLE_FONTS)
+    frame.detailHeader:SetPoint("TOPLEFT", frame.detailTitle, "BOTTOMLEFT", 0, -16)
     frame.detailHeader:SetText("DESCRIPTION")
     frame.detailHeader:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
+    frame.detailHeader:Hide()
 
     frame.detailBody = CreateFontStringWithFallback(frame.detailChild, {
         "QuestFont", "GameFontHighlight", "GameFontNormal",
@@ -426,6 +685,7 @@ function GQ.Log:Init()
     frame.detailBody:SetJustifyH("LEFT")
     frame.detailBody:SetWordWrap(true)
     frame.detailBody:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
+    frame.detailBody:Hide()
 
     frame.detailEmpty = CreateFontStringWithFallback(frame.detailChild, {
         "QuestFont", "GameFontHighlight", "GameFontNormal",
@@ -435,41 +695,46 @@ function GQ.Log:Init()
     frame.detailEmpty:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
     frame.detailEmpty:Show()
 
-    frame.abandonBtn = CreateFrame("Button", "GearQuestLogAbandonButton", frame, "UIPanelButtonTemplate")
-    frame.abandonBtn:SetSize(106, 22)
-    frame.abandonBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 12)
-    frame.abandonBtn:SetText("Abandon")
+    frame.trackBtn = CreateFrame("Button", "GearQuestLogTrackButton", frame, "UIPanelButtonTemplate")
+    frame.trackBtn:SetSize(106, 22)
+    frame.trackBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 12)
+    frame.trackBtn:SetText("Track")
 
-    frame.completeBtn = CreateFrame("Button", "GearQuestLogCompleteButton", frame, "UIPanelButtonTemplate")
-    frame.completeBtn:SetSize(106, 22)
-    frame.completeBtn:SetPoint("LEFT", frame.abandonBtn, "RIGHT", 2, 0)
-    frame.completeBtn:SetText("Complete")
+    frame.untrackBtn = CreateFrame("Button", "GearQuestLogUntrackButton", frame, "UIPanelButtonTemplate")
+    frame.untrackBtn:SetSize(106, 22)
+    frame.untrackBtn:SetPoint("LEFT", frame.trackBtn, "RIGHT", 2, 0)
+    frame.untrackBtn:SetText("Untrack")
 
     frame.exitBtn = CreateFrame("Button", "GearQuestLogExitButton", frame, "UIPanelButtonTemplate")
     frame.exitBtn:SetSize(106, 22)
-    frame.exitBtn:SetPoint("LEFT", frame.completeBtn, "RIGHT", 2, 0)
+    frame.exitBtn:SetPoint("LEFT", frame.untrackBtn, "RIGHT", 2, 0)
     frame.exitBtn:SetText("Exit")
 
-    frame.abandonBtn:SetScript("OnClick", function()
-        if GQ.Log.selectedHuntId then
-            GQ.Log:AbandonHunt(GQ.Log.selectedHuntId)
-        end
-    end)
-
-    frame.completeBtn:SetScript("OnClick", function()
-        if GQ.Log.selectedHuntId then
-            GQ.Log:CompleteHunt(GQ.Log.selectedHuntId)
-        end
-    end)
-
-    frame.exitBtn:SetScript("OnClick", function()
-        GQ.Log:Hide()
-    end)
+    self:WireControls(frame)
+    self:EnsureTrackerEvents()
 
     self.listRows = {}
     self.frame = frame
     self.selectedHuntId = nil
     self:ClearDetail()
+end
+
+function GQ.Log:SetDetailEmpty(empty)
+    if not self.frame then
+        return
+    end
+
+    if empty then
+        self.frame.detailEmpty:Show()
+        self.frame.detailHeader:Hide()
+        self.frame.detailTitle:Hide()
+        self.frame.detailBody:Hide()
+    else
+        self.frame.detailEmpty:Hide()
+        self.frame.detailHeader:Show()
+        self.frame.detailTitle:Show()
+        self.frame.detailBody:Show()
+    end
 end
 
 function GQ.Log:ClearDetail()
@@ -478,7 +743,7 @@ function GQ.Log:ClearDetail()
     end
     self.frame.detailTitle:SetText("")
     self.frame.detailBody:SetText("")
-    self.frame.detailEmpty:Show()
+    self:SetDetailEmpty(true)
 end
 
 function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
@@ -501,7 +766,10 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         row.text:SetTextColor(1, 0.82, 0)
         row.highlight:Hide()
         row:SetScript("OnClick", function()
-            GQ.Log:ToggleSlotCollapsed(slotName)
+            local log = _G.GearQuest and _G.GearQuest.Log
+            if log then
+                log:ToggleSlotCollapsed(slotName)
+            end
         end)
     elseif rowType == "empty" then
         row.icon:SetTexture(nil)
@@ -526,8 +794,8 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         if status == "completed" then
             row.text:SetText(name .. " |cff888888(Completed)|r")
             row.text:SetTextColor(0.55, 0.55, 0.55)
-        elseif status == "active" then
-            row.text:SetText(name .. " |cff00ff00(Active)|r")
+        elseif status == "tracked" then
+            row.text:SetText(name .. " |cff00ff00(Tracked)|r")
             row.text:SetTextColor(r, g, b)
         else
             row.text:SetText(name)
@@ -540,7 +808,10 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
             row.highlight:Hide()
         end
         row:SetScript("OnClick", function()
-            GQ.Log:SelectHunt(entry.id)
+            local log = _G.GearQuest and _G.GearQuest.Log
+            if log then
+                log:SelectHunt(entry.id)
+            end
         end)
     end
 
@@ -556,7 +827,7 @@ function GQ.Log:SelectHunt(id)
 
     local itemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
 
-    self.frame.detailEmpty:Hide()
+    self:SetDetailEmpty(false)
     self.frame.detailTitle:SetText("|cff" .. DETAIL_TEXT_HEX .. itemName:upper() .. "|r")
     self.frame.detailTitle:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
 
@@ -572,16 +843,9 @@ function GQ.Log:SelectHunt(id)
     end
     table.insert(lines, "\nSource: " .. GQ:GetSourceLabel(entry.sourceType))
 
-    local status = GetHuntStatus(entry.id)
-    if status == "completed" then
-        table.insert(lines, "\n|cff888888Status: Completed|r")
-    elseif status == "active" then
-        table.insert(lines, "\n|cff00ff00Status: Active hunt|r")
-    end
-
     self.frame.detailBody:SetText(table.concat(lines, "\n"))
 
-    local bodyHeight = self.frame.detailBody:GetStringHeight() + 80
+    local bodyHeight = self.frame.detailBody:GetStringHeight() + 100
     local visibleHeight = self.frame.detailScroll:GetHeight() or 120
     self.frame.detailChild:SetHeight(math.max(bodyHeight, visibleHeight))
     UpdateScrollChildRect(self.frame.detailScroll)
@@ -597,7 +861,7 @@ function GQ.Log:Refresh()
     local yOffset = 0
 
     for _, slotName in ipairs(slots) do
-        local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, 3)
+        local upgrades = self:GetSlotListEntries(slotName)
         table.insert(layoutRows, { type = "header", slotName = slotName })
 
         if not self:IsSlotCollapsed(slotName) then
@@ -627,12 +891,15 @@ function GQ.Log:Refresh()
     self.frame.scrollChild:SetHeight(math.max(yOffset, 1))
     UpdateScrollChildRect(self.frame.scroll)
 
-    local listVisible = self.frame.scroll:GetHeight() or 0
-    ConfigurePanelScrollBar(self.frame.scroll, yOffset > listVisible + 1)
+    ConfigurePanelScrollBar(self.frame.scroll, self.frame.listGutter, self.frame)
 
     local detailVisible = self.frame.detailScroll:GetHeight() or 0
     local detailContent = self.frame.detailChild:GetHeight() or 0
-    ConfigurePanelScrollBar(self.frame.detailScroll, detailContent > detailVisible + 1)
+    if detailContent <= detailVisible + 1 then
+        self.frame.detailChild:SetHeight(detailVisible + 2)
+        UpdateScrollChildRect(self.frame.detailScroll)
+    end
+    ConfigurePanelScrollBar(self.frame.detailScroll, self.frame.detailGutter, self.frame)
 
     if self.selectedHuntId and not GetHuntRecord(self.selectedHuntId) and not GQ.Data:GetEntryById(self.selectedHuntId) then
         self.selectedHuntId = nil
@@ -641,9 +908,23 @@ function GQ.Log:Refresh()
 end
 
 function GQ.Log:Show()
+    if not self.frame then
+        return
+    end
+
     SetupQuestLogPortrait(self.frame)
     ApplyParchmentBackground(self.frame.detailBg)
-    self:Refresh()
+    ConfigurePanelScrollBar(self.frame.scroll, self.frame.listGutter, self.frame)
+    ConfigurePanelScrollBar(self.frame.detailScroll, self.frame.detailGutter, self.frame)
+
+    local ok, err = pcall(function()
+        self:CheckAutoCompletion()
+        self:Refresh()
+    end)
+    if not ok then
+        print("|cffff0000GearQuest log error:|r " .. tostring(err))
+    end
+
     self.frame:Show()
 end
 
@@ -652,6 +933,9 @@ function GQ.Log:Hide()
 end
 
 function GQ.Log:Toggle()
+    if not self.frame then
+        return
+    end
     if self.frame:IsShown() then
         self:Hide()
     else

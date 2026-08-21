@@ -38,7 +38,25 @@ local function RegisterButtonClicks(button)
 end
 
 function GQ.Minimap:Init()
-    if self.button or not Minimap then
+    if self.initialized then
+        return
+    end
+    self.initialized = true
+
+    if self.button or _G.GearQuestMinimapButton then
+        self.button = self.button or _G.GearQuestMinimapButton
+        if self.button then
+            self.button:SetScript("OnClick", function()
+                local gq = _G.GearQuest
+                if gq and gq.Log then
+                    gq.Log:Toggle()
+                end
+            end)
+        end
+        return
+    end
+
+    if not Minimap then
         return
     end
 
@@ -62,7 +80,10 @@ function GQ.Minimap:Init()
     button:RegisterForDrag("LeftButton")
 
     button:SetScript("OnClick", function()
-        GQ.Log:Toggle()
+        local gq = _G.GearQuest
+        if gq and gq.Log then
+            gq.Log:Toggle()
+        end
     end)
 
     button:SetScript("OnDragStart", function(self)

@@ -100,8 +100,56 @@ local SLOT_TO_INVENTORY = {
     Ranged = 18,
 }
 
+-- Log categories: both finger/trinket inventory slots share one upgrade list each.
+GQ.Data.MERGED_SLOT_INVENTORY = {
+    Finger = { 11, 12 },
+    Trinket = { 13, 14 },
+}
+
+function GQ.Data:NormalizeSlotName(slotName)
+    if slotName == "Finger0" or slotName == "Finger1" then
+        return "Finger"
+    end
+    if slotName == "Trinket0" or slotName == "Trinket1" then
+        return "Trinket"
+    end
+    return slotName
+end
+
+function GQ.Data:GetInventorySlots(slotName)
+    slotName = self:NormalizeSlotName(slotName)
+    if self.MERGED_SLOT_INVENTORY[slotName] then
+        return self.MERGED_SLOT_INVENTORY[slotName]
+    end
+
+    local inv = SLOT_TO_INVENTORY[slotName]
+    if inv then
+        return { inv }
+    end
+    return {}
+end
+
 function GQ.Data:GetInventorySlot(slotName)
-    return SLOT_TO_INVENTORY[slotName]
+    local slots = self:GetInventorySlots(slotName)
+    return slots[1]
+end
+
+function GQ.Data:EntryMatchesSlot(entry, slotName)
+    if not entry or not entry.slot then
+        return false
+    end
+    return self:NormalizeSlotName(entry.slot) == self:NormalizeSlotName(slotName)
+end
+
+function GQ.Data:GetCandidateSlotKeys(slotName)
+    slotName = self:NormalizeSlotName(slotName)
+    if slotName == "Finger" then
+        return { "Finger", "Finger0", "Finger1" }
+    end
+    if slotName == "Trinket" then
+        return { "Trinket", "Trinket0", "Trinket1" }
+    end
+    return { slotName }
 end
 
 function GQ.Data:BuildIndex()
@@ -140,12 +188,15 @@ function GQ.Data:EntryMatchesPlayer(entry)
 end
 
 function GQ.Data:GetCandidatesForSlot(slotName)
-    local candidates = self.bySlot[slotName] or {}
     local results = {}
+    local seen = {}
 
-    for _, entry in ipairs(candidates) do
-        if self:EntryMatchesPlayer(entry) then
-            table.insert(results, entry)
+    for _, key in ipairs(self:GetCandidateSlotKeys(slotName)) do
+        for _, entry in ipairs(self.bySlot[key] or {}) do
+            if not seen[entry.id] and self:EntryMatchesPlayer(entry) then
+                seen[entry.id] = true
+                table.insert(results, entry)
+            end
         end
     end
 
@@ -163,10 +214,8 @@ GQ.Data.SLOT_LABELS = {
     Waist = "Waist",
     Legs = "Legs",
     Feet = "Feet",
-    Finger0 = "Finger",
-    Finger1 = "Finger",
-    Trinket0 = "Trinket",
-    Trinket1 = "Trinket",
+    Finger = "Finger",
+    Trinket = "Trinket",
     MainHand = "Main Hand",
     SecondaryHand = "Off Hand",
     Ranged = "Ranged",
@@ -174,7 +223,7 @@ GQ.Data.SLOT_LABELS = {
 
 GQ.Data.BASE_SLOTS = {
     "Head", "Neck", "Shoulder", "Back", "Chest", "Wrist", "Hands",
-    "Waist", "Legs", "Feet", "Finger0", "Finger1", "Trinket0", "Trinket1",
+    "Waist", "Legs", "Feet", "Finger", "Trinket",
     "MainHand", "SecondaryHand",
 }
 
@@ -187,20 +236,29 @@ GQ.Data.CLASS_RANGED = {
 
 function GQ.Data:GetSlotsForClass(classFile)
     local slots = {}
+    local seen = {}
+
     for _, slotName in ipairs(self.BASE_SLOTS) do
-        table.insert(slots, slotName)
+        slotName = self:NormalizeSlotName(slotName)
+        if not seen[slotName] then
+            seen[slotName] = true
+            table.insert(slots, slotName)
+        end
     end
-    if self.CLASS_RANGED[classFile] then
+
+    if self.CLASS_RANGED[classFile] and not seen.Ranged then
         table.insert(slots, "Ranged")
     end
+
     return slots
 end
 
 function GQ.Data:GetTopUpgradesForSlot(slotName, maxResults)
+    slotName = self:NormalizeSlotName(slotName)
     local candidates = self:GetCandidatesForSlot(slotName)
     return GQ.Compare:RankEntries(candidates, slotName, maxResults or 3)
 end
 
 function GQ.Data:SlotLabel(slotName)
-    return self.SLOT_LABELS[slotName] or slotName
+    return self.SLOT_LABELS[self:NormalizeSlotName(slotName)] or slotName
 end
