@@ -1,0 +1,17 @@
+## Interface: 20505
+## Title: GearQuest
+## Notes: Leveling gear upgrades — click a slot, pick a hunt, track it in the log.
+## Author: Henrik8210
+## Version: 0.1.0
+## X-Curse-Project-ID: <YOUR_PROJECT_ID>
+## SavedVariables: GearQuestDB
+
+Core.lua
+Preview.lua
+Data.lua
+Compare.lua
+Log.lua
+Popup.lua
+PaperDoll.lua
+Minimap.lua
+Commands.lua
