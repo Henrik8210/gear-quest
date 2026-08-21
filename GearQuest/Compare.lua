@@ -39,7 +39,11 @@ function GQ.Compare:GetEquippedItemLevel(slotName)
     return lowestIlvl or 0
 end
 
-function GQ.Compare:ScoreEntry(entry, equippedIlvl)
+-- Lower-tier armor only ranks if it is clearly stronger than the best preferred-tier option.
+local LOWER_ARMOR_ILVL_MARGIN = 8
+local LOWER_ARMOR_SCORE_PENALTY = 500
+
+function GQ.Compare:ScoreEntry(entry, equippedIlvl, slotName, maxPreferredIlvl)
     local itemIlvl = GetItemLevel(entry.itemId)
     local upgradeDelta = itemIlvl - equippedIlvl
 
@@ -51,21 +55,44 @@ function GQ.Compare:ScoreEntry(entry, equippedIlvl)
         sourceBonus = 1
     elseif entry.sourceType == "vendor" then
         sourceBonus = 1
+    elseif entry.sourceType == "profession" then
+        sourceBonus = 1
     end
 
-    return upgradeDelta * 10 + sourceBonus, itemIlvl
+    local armorPenalty = 0
+    if slotName and GQ.Equip and GQ.Equip.MeetsArmorPreference then
+        local classFile = GQ:GetEffectiveClass()
+        local playerLevel = GQ:GetEffectiveLevel()
+        if not GQ.Equip:MeetsArmorPreference(entry.itemId, slotName, classFile, playerLevel) then
+            if not maxPreferredIlvl or itemIlvl < maxPreferredIlvl + LOWER_ARMOR_ILVL_MARGIN then
+                armorPenalty = -LOWER_ARMOR_SCORE_PENALTY
+            end
+        end
+    end
+
+    return upgradeDelta * 10 + sourceBonus + armorPenalty, itemIlvl
 end
 
 function GQ.Compare:RankEntries(entries, slotName, maxResults)
     maxResults = maxResults or 3
     local equippedIlvl = self:GetEquippedItemLevel(slotName)
+    local classFile = GQ:GetEffectiveClass()
+    local playerLevel = GQ:GetEffectiveLevel()
+    local maxPreferredIlvl = 0
+
+    if GQ.Equip and GQ.Equip.MeetsArmorPreference then
+        for _, entry in ipairs(entries) do
+            if GQ.Equip:MeetsArmorPreference(entry.itemId, slotName, classFile, playerLevel) then
+                maxPreferredIlvl = math.max(maxPreferredIlvl, GetItemLevel(entry.itemId))
+            end
+        end
+    end
+
     local scored = {}
 
     for _, entry in ipairs(entries) do
-        local score, itemIlvl = self:ScoreEntry(entry, equippedIlvl)
-        if itemIlvl > equippedIlvl or equippedIlvl == 0 then
-            table.insert(scored, { entry = entry, score = score, itemIlvl = itemIlvl })
-        end
+        local score, itemIlvl = self:ScoreEntry(entry, equippedIlvl, slotName, maxPreferredIlvl)
+        table.insert(scored, { entry = entry, score = score, itemIlvl = itemIlvl })
     end
 
     table.sort(scored, function(a, b)

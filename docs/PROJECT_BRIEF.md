@@ -32,6 +32,8 @@ Pre-made **gear quests** per item, not generated at runtime. Each entry roughly:
 
 Compare equipped item vs candidates by item level + simple stat relevance for class/spec at that level — not full BiS sims.
 
+**Data curation rules:** [DATA_RULES.md](./DATA_RULES.md) — equippability, level bands, spec, import checklist.
+
 ## MVP scope
 
 - One slot type first (Main Hand weapons) for one class (Hunter) across levels 30–45

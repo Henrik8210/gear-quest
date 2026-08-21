@@ -71,13 +71,13 @@ function GQ.Preview:GetSettings()
 
     local preview = GearQuestDB.settings.preview
     if preview.enabled == nil then
-        preview.enabled = true
+        preview.enabled = false
     end
     if not preview.class then
-        preview.class = "HUNTER"
+        preview.class = "PALADIN"
     end
     if not preview.level then
-        preview.level = 37
+        preview.level = 4
     end
     if not preview.faction then
         local faction = UnitFactionGroup("player")
@@ -153,6 +153,46 @@ function GQ.Preview:GetEffectiveFaction()
         return self:GetSettings().faction
     end
     return UnitFactionGroup("player") or "Alliance"
+end
+
+local PALADIN_SPEC_BY_TAB = {
+    [1] = "holy",
+    [2] = "protection",
+    [3] = "retribution",
+}
+
+function GQ.Preview:GetEffectiveSpec()
+    local level = self:GetEffectiveLevel()
+    if level < 10 then
+        return nil
+    end
+
+    local preview = self:GetSettings()
+    if preview.spec then
+        return preview.spec
+    end
+
+    if self:IsEnabled() then
+        return nil
+    end
+
+    local _, classFile = UnitClass("player")
+    if classFile == "PALADIN" and GetTalentTabInfo then
+        local bestTab, bestPoints = nil, 0
+        for tab = 1, 3 do
+            local _, _, points = GetTalentTabInfo(tab)
+            points = points or 0
+            if points > bestPoints then
+                bestPoints = points
+                bestTab = tab
+            end
+        end
+        if bestTab and bestPoints > 0 then
+            return PALADIN_SPEC_BY_TAB[bestTab]
+        end
+    end
+
+    return nil
 end
 
 function GQ.Preview:GetLabel()
@@ -336,6 +376,10 @@ end
 
 function GQ:GetEffectiveFaction()
     return self.Preview:GetEffectiveFaction()
+end
+
+function GQ:GetEffectiveSpec()
+    return self.Preview:GetEffectiveSpec()
 end
 
 function GQ:GetPreviewLabel()

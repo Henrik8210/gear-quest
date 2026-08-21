@@ -8,6 +8,7 @@
 
 Core.lua
 Preview.lua
+Equip.lua
 Data.lua
 Compare.lua
 Log.lua

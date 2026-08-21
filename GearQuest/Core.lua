@@ -22,6 +22,7 @@ local SOURCE_LABELS = {
     boss_drop = "Boss drop",
     quest_reward = "Quest reward",
     vendor = "Vendor",
+    profession = "Profession",
     auction_house = "Auction House",
 }
 
@@ -30,6 +31,7 @@ local SOURCE_COLORS = {
     boss_drop = "|cffff4444",
     quest_reward = "|cff00ff00",
     vendor = "|cffffcc00",
+    profession = "|cffcc66ff",
     auction_house = "|cffffa500",
 }
 

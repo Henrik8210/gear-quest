@@ -115,6 +115,36 @@ function GQ.Popup:WireIconScripts()
     end
 end
 
+function GQ.Popup:EnsureDismissLayer()
+    if self.dismissLayer then
+        return
+    end
+
+    local parent = CharacterFrame or UIParent
+    local layer = CreateFrame("Button", "GearQuestPopupDismiss", parent)
+    layer:SetFrameStrata("HIGH")
+    layer:SetAllPoints(parent)
+    layer:EnableMouse(true)
+    layer:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    layer:SetScript("OnClick", function()
+        local popup = _G.GearQuest and _G.GearQuest.Popup
+        if popup then
+            popup:Hide()
+        end
+    end)
+    layer:Hide()
+    self.dismissLayer = layer
+end
+
+function GQ.Popup:ShowDismissLayer()
+    self:EnsureDismissLayer()
+    if not self.dismissLayer or not self.container then
+        return
+    end
+    self.dismissLayer:SetFrameLevel(self.container:GetFrameLevel() - 1)
+    self.dismissLayer:Show()
+end
+
 function GQ.Popup:Init()
     if self.initialized then
         return
@@ -131,6 +161,7 @@ function GQ.Popup:Init()
             end
         end
         self:WireIconScripts()
+        self:EnsureDismissLayer()
         return
     end
 
@@ -192,6 +223,7 @@ function GQ.Popup:Init()
     end
 
     self:WireIconScripts()
+    self:EnsureDismissLayer()
 end
 
 function GQ.Popup:PositionBar(slotButton, count)
@@ -246,6 +278,10 @@ function GQ.Popup:Hide()
         return
     end
 
+    if self.dismissLayer then
+        self.dismissLayer:Hide()
+    end
+
     self.container:Hide()
     self.container.bar:Hide()
     for i = 1, MAX_OPTIONS do
@@ -295,7 +331,9 @@ function GQ.Popup:ShowForSlot(slotName, slotButton)
     end
 
     self.container.bar:Show()
+    self.container:SetFrameLevel((CharacterFrame and CharacterFrame:GetFrameLevel() or 0) + 10)
     self.container:Show()
+    self:ShowDismissLayer()
 end
 
 function GQ.Popup:Toggle()
