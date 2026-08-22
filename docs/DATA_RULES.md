@@ -202,15 +202,57 @@ maxLevel = 12,  -- last level it is normally shown
 
 ## 4. Spec (talents, level 10+)
 
-- Below level 10: no spec filter; all class-valid entries compete.
-- Level 10+: prefer items that match the player's **active talent focus** (e.g. Retribution vs Holy for Paladin).
-- Optional entry field:
+- **Below level 10:** no spec filter; all class-valid entries compete.
+- **Level 10+:** GearQuest filters entries by the player's **active specialization** (Paladin: Holy, Protection, Retribution).
+- **Default:** Retribution — the baseline leveling BiS path. Mail Strength/Stamina gear and melee weapons are tagged for Retribution + Protection unless noted otherwise.
+- **Holy layer:** cloth/leather +Intellect/+Spirit quest alternatives get `specs = { holy = true }` (e.g. Minor Channeling Ring, Ridgeback Bracers, Wayfaring Gloves).
+- **Protection-only:** tank-focused shields get `specs = { protection = true }` when they should not appear for Ret.
+- **All specs:** omit `specs` on universal items (cloaks, seasonal head, etc.).
+
+### Availability (Paladin, current)
+
+| Spec | Selectable | Notes |
+|------|------------|--------|
+| **Retribution** | Yes | Default at level 10+; full leveling BiS path today |
+| **Holy** | No (coming later) | Shown greyed out in the log spec picker; entries may already carry `specs = { holy = true }` |
+| **Protection** | No (coming later) | Same as Holy |
+
+When enabling a spec later, remove `comingLater = true` from its row in `GearQuest/Spec.lua` (`CLASS_SPECS`).
+
+### Player controls
+
+- **Log UI (level 10+):** top-right of the tab bar — current spec **icon** plus a **dropdown arrow**. Only the arrow opens the picker. Active/Completed stay centered below.
+- **Spec picker:** same metal border + black background as the quest log list panel. Unavailable specs are greyed, labelled `(coming later)`, and not clickable.
+- **Chat:** `/gq spec ret` (aliases: `spec`, `specialization`, `talent`). Only selectable specs work; others return *"… is coming later."*
+- **Persistence:** choice is saved per class in `GearQuestDB.settings.specByClass`.
+- **Live characters:** if no saved choice, GearQuest infers spec from talent points **when that spec is selectable**; otherwise defaults to Retribution.
+
+### Entry field
 
 ```lua
-specs = { holy = true, retribution = true },  -- omit = all specs
+local SPEC_MELEE = { retribution = true, protection = true }
+local SPEC_HOLY = { holy = true }
+local SPEC_PROT = { protection = true }
+
+specs = SPEC_HOLY,  -- omit = all specs
 ```
 
-Spec detection uses talent points when preview mode is off; preview mode may add a `spec` setting later.
+### Spec definition (`Spec.lua`)
+
+```lua
+{ id = "holy", label = "Holy", icon = "Interface\\Icons\\Spell_Holy_HolyBolt", comingLater = true },
+```
+
+- `comingLater = true` — listed in the picker but not selectable; `SetSelectedSpec` rejects it.
+- `default = true` — used when no saved/talent spec applies (Retribution for Paladin).
+
+### Level-up message
+
+At level 10, a one-time chat message (milestone key `specSwitch` in `Core.lua`):
+
+> Congratulations — you've reached level 10! Specializations are now available in GearQuest. Open `/gq log` to browse spec-specific upgrades; **Retribution** is selected by default.
+
+Do **not** mention Holy/Protection availability in the message — the picker already shows `(coming later)`.
 
 ---
 
@@ -249,6 +291,7 @@ Spec detection uses talent points when preview mode is off; preview mode may add
 - [ ] Back slot: highest armor / ilvl at that req level (cloaks are always cloth)
 - [ ] Checked vendor, quest, world drop, boss, and profession sources where items exist
 - [ ] Faction and spec filters are correct or omitted
+- [ ] If a spec is not yet selectable, `comingLater = true` is set in `Spec.lua` (not just missing data)
 - [ ] Instructions match the source type and zone
 - [ ] Test in-game at `/gq preview set class paladin level N` (or on a real character) and confirm top 3 look sane
 
@@ -259,6 +302,8 @@ Spec detection uses talent points when preview mode is off; preview mode may add
 | File | Role |
 |------|------|
 | `GearQuest/Data.lua` | Static entries |
+| `GearQuest/Spec.lua` | Spec definitions, icons, `comingLater`, saved choice, picker filtering |
+| `GearQuest/Log.lua` | Spec icon + arrow UI, spec picker chrome |
 | `GearQuest/Equip.lua` | Equippability, required level, armor tier, spec, level grace |
 | `GearQuest/Compare.lua` | Top-3 ranking vs equipped item |
 | `GearQuest/Preview.lua` | Effective class / level / faction (and spec) |
@@ -321,10 +366,59 @@ Document in the batch when a slot has **no entries** on purpose:
 
 | Slot | Typical low-level rule |
 |------|------------------------|
-| **Shoulder** | Skip in level 4–6 bands — no meaningful shoulder upgrades at those levels. |
+| **Shoulder** | Skip until a meaningful upgrade exists (e.g. level 9+). Hide from log via `SLOT_UNLOCK_LEVEL` until then. |
+| **Finger** | Skip until the first curated ring hunt exists (level 9 band). See **Slot unlock & level-up messages** below. |
+| **Trinket** | Skip until the first curated trinket hunt exists; same unlock/milestone pattern as rings when added. |
 | **Neck** | Add when valid neck items exist for the band; otherwise popup correctly reports no hunts. |
+| **Head** | Often covered from level 1 (seasonal crown). Defer only if you intentionally have no head entries in early bands. |
 
 When adding a new band (e.g. `early6_*`), copy the slot coverage pattern from the previous band and adjust — do not assume shoulder/neck carry over.
+
+### Slot unlock & level-up messages
+
+Some equipment slots are **hidden from `/gq log` and upgrade lists** until the player reaches a configured level, even though the character panel may show the slot earlier. Others stay visible but have **no entries** until you add data for a band.
+
+This keeps low-level logs focused and avoids empty categories. When a slot **first becomes relevant**, the player gets a **one-time chat message** (saved in `GearQuestDB.settings.milestones`).
+
+#### Two mechanisms (keep both in sync when curating)
+
+| Mechanism | Where | What it does |
+|-----------|--------|----------------|
+| **Slot unlock level** | `GQ.Data.SLOT_UNLOCK_LEVEL` in `Data.lua` | Slot category omitted from log/popup/indicators until `GetEffectiveLevel()` ≥ unlock level. |
+| **Level-up milestone** | `GQ:CheckLevelMilestones` in `Core.lua` | One-time chat print when the player **crosses** the level where new slot content applies. Fires on real level-up, `/gq level N`, and login if not yet notified. |
+
+#### Message wording (principle)
+
+Match the message to **how many upgrades exist for that slot at that level**, not WoW’s raw equip rules:
+
+| Situation | Message intent | Example (rings) |
+|-----------|----------------|-----------------|
+| **First hunt for a dual-slot category** | One of the two slots can now be filled | *“One of your ring slots is now eligible for an upgrade!”* |
+| **Second hunt for a dual-slot category** (later band) | The other slot can now be filled | *“Your other ring slot is now eligible for an upgrade!”* |
+| **First hunt for a single-slot category** | That slot category is now in the log | *“Shoulder upgrades are now available!”* (word similarly for head/neck when you add them) |
+
+**Dual-slot categories in WoW:** `Finger` (two rings), `Trinket` (two trinkets). GearQuest merges each pair into one log section (`Finger`, `Trinket`) but milestone copy should reflect that the player fills **one slot at a time** as curated hunts appear — not “both slots unlocked” on day one unless you actually add two ranked rings/trinkets in the same band.
+
+**Single-slot categories** often deferred: **Shoulder**, sometimes **Neck** / **Head** if you skip early bands. Use unlock level + a milestone when the **first** entry appears in data.
+
+#### Author checklist when adding deferred slots
+
+1. Set `SLOT_UNLOCK_LEVEL.<Slot>` to the band’s `minLevel` when the slot first appears in `Data.lua`.
+2. Add at least one `Finger` / `Trinket` / `Shoulder` / … entry at that band with `curatedRank = 1`.
+3. Wire a milestone in `Core.lua` (`NotifyMilestoneOnce`) when the player crosses that level — or set `GQ.Data.RING_SLOT_2_MILESTONE_LEVEL` (and future constants) for the **second** ring/trinket hunt at a later band.
+4. Use milestone keys like `ringSlot1`, `ringSlot2`, `trinketSlot1`, `shoulderSlot1` — one key per message, never repeat after first show.
+5. Point players to `/gq log` in the message; keep tone short and factual.
+
+#### Current implementation (reference)
+
+| Level | Slot | Unlock | Milestone key | Notes |
+|-------|------|--------|---------------|--------|
+| 9 | Finger | yes | `ringSlot1` | One ring in band (`Minor Channeling Ring`). |
+| 9 | Shoulder | yes | — | No separate milestone yet; shoulder shares level 9 band with ring. Add a `shoulderSlot1` message if you want an explicit shoulder callout. |
+| TBD | Finger #2 | — | `ringSlot2` | Set `GQ.Data.RING_SLOT_2_MILESTONE_LEVEL` when second `Finger` entry is added. |
+| TBD | Trinket | — | `trinketSlot1` / `trinketSlot2` | Same pattern as rings when trinket data is curated. |
+
+Triggers: `PLAYER_LEVEL_UP`, preview `/gq level N` (`Preview.lua`), and `PLAYER_LOGIN` (catch-up if already at level).
 
 ### Level 6 band constants (example)
 
@@ -354,7 +448,8 @@ Use `id` prefix `early6_<slot>_<snake_name>`. Order legs (and similar) by **real
 | `GearQuest/PaperDoll.lua` | Right-click slot hooks (`SUPPORTED_SLOTS`) |
 | `GearQuest/Indicator.lua` | Green ↑ on BiS items in loot/quest/profession UI |
 | `GearQuest/Toast.lua` | “BiS upgrade obtained!” celebration toast |
-| `GearQuest/Data.lua` | `GetActiveBandMinLevel`, `IsEntryNewForPlayer` |
+| `GearQuest/Data.lua` | `GetActiveBandMinLevel`, `IsEntryNewForPlayer`, `SLOT_UNLOCK_LEVEL`, `RING_SLOT_2_MILESTONE_LEVEL` |
+| `GearQuest/Core.lua` | `CheckLevelMilestones`, `NotifyMilestoneOnce` — slot unlock chat messages |
 
 ### Upgrade indicators (`Indicator.lua`)
 

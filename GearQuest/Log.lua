@@ -34,6 +34,16 @@ local REWARD_NAME_MIN_WIDTH = 150
 local REWARD_NAME_PAD = 16
 local LIST_TOOLTIP_X_GAP = 20
 local LIST_NEW_LABEL = " |cffFFD200New|r"
+local SPEC_PICKER_WIDTH = 188
+local SPEC_PICKER_ROW_HEIGHT = 20
+local SPEC_PICKER_PAD = 4
+local SPEC_ICON_SIZE = 18
+local SPEC_ARROW_SIZE = 27
+local SPEC_CONTROL_GAP = 2
+local SPEC_CONTROL_WIDTH = SPEC_ICON_SIZE + SPEC_CONTROL_GAP + SPEC_ARROW_SIZE
+local SPEC_CONTROL_HEIGHT = math.max(SPEC_ICON_SIZE, SPEC_ARROW_SIZE)
+local SPEC_ROW_GAP = 2
+local TAB_GROUP_WIDTH = (88 * 2) + 4
 local DETAIL_TEXT_COLOR = { 0.13, 0.09, 0.04 }
 local DETAIL_TEXT_HEX = "21160a"
 local QUEST_DETAIL_TITLE_FONTS = {
@@ -597,6 +607,10 @@ function GQ.Log:EntryMatchesTrackedHunt(entry)
 
     local faction = GQ:GetEffectiveFaction()
     if entry.factions and not entry.factions[faction] then
+        return false
+    end
+
+    if GQ.Equip and GQ.Equip.EntryMatchesSpec and not GQ.Equip:EntryMatchesSpec(entry) then
         return false
     end
 
@@ -1178,6 +1192,345 @@ function GQ.Log:EnsureTrackerEvents()
     self.trackerFrame = tracker
 end
 
+local function ApplySpecPickerChrome(picker)
+    if not picker then
+        return
+    end
+
+    ApplyBlackBackground(picker)
+    ApplyMetalEdge(picker, 12)
+end
+
+function GQ.Log:HideSpecPicker()
+    if self.frame and self.frame.specPicker then
+        self.frame.specPicker:Hide()
+    end
+    if self._specPickerCatcher then
+        self._specPickerCatcher:Hide()
+    end
+end
+
+function GQ.Log:EnsureSpecPicker(frame)
+    if frame.specPicker then
+        ApplySpecPickerChrome(frame.specPicker)
+        return frame.specPicker
+    end
+
+    local parent = frame.tabBar or frame
+    local picker
+    local ok, framed = pcall(CreateFrame, "Frame", "GearQuestSpecPicker", parent, "BackdropTemplate")
+    if ok and framed then
+        picker = framed
+    else
+        picker = CreateFrame("Frame", "GearQuestSpecPicker", parent)
+    end
+
+    picker:SetFrameStrata("FULLSCREEN_DIALOG")
+    picker:SetSize(SPEC_PICKER_WIDTH, SPEC_PICKER_PAD * 2)
+    picker:Hide()
+    ApplySpecPickerChrome(picker)
+    picker.rows = {}
+
+    frame.specPicker = picker
+    return picker
+end
+
+function GQ.Log:RefreshSpecPickerRows()
+    local frame = self.frame
+    if not frame or not frame.specPicker or not GQ.Spec then
+        return
+    end
+
+    local picker = frame.specPicker
+    local options = GQ.Spec:GetOptions(GQ:GetEffectiveClass()) or {}
+    local current = GQ.Spec:GetEffectiveSpec()
+    local rowCount = #options
+
+    for i, row in ipairs(picker.rows) do
+        row:Hide()
+    end
+
+    for i, opt in ipairs(options) do
+        local row = picker.rows[i]
+        if not row then
+            row = CreateFrame("Button", nil, picker)
+            row:SetSize(SPEC_PICKER_WIDTH - (SPEC_PICKER_PAD * 2), SPEC_PICKER_ROW_HEIGHT)
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(16, 16)
+            row.icon:SetPoint("LEFT", row, "LEFT", 2, 0)
+            row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+            row.label:SetJustifyH("LEFT")
+            local highlight = row:GetHighlightTexture()
+            if highlight then
+                highlight:SetAlpha(0.25)
+            end
+            picker.rows[i] = row
+        end
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", picker, "TOPLEFT", SPEC_PICKER_PAD, -(SPEC_PICKER_PAD + ((i - 1) * SPEC_PICKER_ROW_HEIGHT)))
+        row:Show()
+
+        local selectable = GQ.Spec:IsSpecSelectable(opt.id)
+        row.icon:SetTexture(GQ.Spec:GetSpecIcon(opt.id))
+        if selectable then
+            row.icon:SetVertexColor(1, 1, 1)
+        else
+            row.icon:SetVertexColor(0.45, 0.45, 0.45)
+        end
+
+        local selected = (current == opt.id)
+        if not selectable then
+            row:Disable()
+            row.label:SetText("|cff888888" .. opt.label .. " (coming later)|r")
+            row:SetScript("OnClick", nil)
+        else
+            row:Enable()
+            if selected then
+                row.label:SetText("|cffFFD200> |r" .. opt.label)
+            else
+                row.label:SetText(opt.label)
+            end
+
+            row:SetScript("OnClick", function()
+                local ok, err = GQ.Spec:SetSelectedSpec(opt.id)
+                if not ok then
+                    print("|cff66ccffGearQuest|r: " .. (err or "Could not change specialization."))
+                    return
+                end
+                print(string.format(
+                    "|cff66ccffGearQuest|r: Now viewing |cff00ff00%s|r upgrades.",
+                    opt.label
+                ))
+                GQ.Log:HideSpecPicker()
+                GQ.Log:UpdateSpecButton()
+                if GQ.Log.frame and GQ.Log.frame:IsShown() then
+                    GQ.Log:Refresh()
+                end
+            end)
+        end
+    end
+
+    picker:SetHeight((SPEC_PICKER_PAD * 2) + (rowCount * SPEC_PICKER_ROW_HEIGHT))
+end
+
+function GQ.Log:ToggleSpecPicker(anchorBtn)
+    local frame = self.frame
+    if not frame or not anchorBtn then
+        return
+    end
+
+    self:EnsureSpecPicker(frame)
+    local picker = frame.specPicker
+
+    if picker:IsShown() then
+        self:HideSpecPicker()
+        return
+    end
+
+    self:RefreshSpecPickerRows()
+    picker:ClearAllPoints()
+    picker:SetPoint("TOPRIGHT", anchorBtn, "BOTTOMRIGHT", 0, -2)
+    picker:SetFrameLevel((anchorBtn:GetFrameLevel() or 1) + 10)
+    picker:Show()
+
+    if not self._specPickerCatcher then
+        local catcher = CreateFrame("Frame", "GearQuestSpecPickerCatcher", UIParent)
+        catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+        catcher:SetAllPoints(UIParent)
+        catcher:EnableMouse(true)
+        catcher:Hide()
+        catcher:SetScript("OnMouseDown", function()
+            GQ.Log:HideSpecPicker()
+        end)
+        self._specPickerCatcher = catcher
+    end
+
+    self._specPickerCatcher:SetFrameLevel(picker:GetFrameLevel() - 1)
+    self._specPickerCatcher:Show()
+end
+
+function GQ.Log:WireSpecArrow(arrowFrame)
+    if not arrowFrame or arrowFrame.gqArrowWired then
+        return
+    end
+
+    arrowFrame.gqArrowWired = true
+    arrowFrame:EnableMouse(true)
+
+    arrowFrame:SetScript("OnEnter", function(self)
+        if self.gqHighlight then
+            self.gqHighlight:Show()
+        end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Change specialization", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    arrowFrame:SetScript("OnLeave", function(self)
+        if self.gqHighlight then
+            self.gqHighlight:Hide()
+        end
+        GameTooltip:Hide()
+    end)
+    arrowFrame:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then
+            local log = _G.GearQuest and _G.GearQuest.Log
+            if log then
+                log:ToggleSpecPicker(self)
+            end
+        end
+    end)
+end
+
+function GQ.Log:ApplySpecArrowStyle(arrowFrame, iconFrame)
+    if not arrowFrame then
+        return
+    end
+
+    arrowFrame:SetSize(SPEC_ARROW_SIZE, SPEC_ARROW_SIZE)
+
+    if arrowFrame.bg then
+        arrowFrame.bg:Hide()
+    end
+
+    if arrowFrame.border then
+        arrowFrame.border:Hide()
+    end
+
+    if arrowFrame.text then
+        arrowFrame.text:Hide()
+    end
+
+    if arrowFrame.SetNormalTexture then
+        arrowFrame:SetNormalTexture(nil)
+        arrowFrame:SetPushedTexture(nil)
+        arrowFrame:SetDisabledTexture(nil)
+        arrowFrame:SetHighlightTexture(nil)
+    end
+
+    if not arrowFrame.arrow then
+        arrowFrame.arrow = arrowFrame:CreateTexture(nil, "ARTWORK")
+        arrowFrame.arrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+    end
+
+    arrowFrame.arrow:ClearAllPoints()
+    arrowFrame.arrow:SetAllPoints(arrowFrame)
+    arrowFrame.arrow:Show()
+
+    if not arrowFrame.gqHighlight then
+        arrowFrame.gqHighlight = arrowFrame:CreateTexture(nil, "HIGHLIGHT")
+        arrowFrame.gqHighlight:SetAllPoints()
+        arrowFrame.gqHighlight:SetColorTexture(1, 1, 1, 0.15)
+        arrowFrame.gqHighlight:Hide()
+    end
+
+    if iconFrame then
+        arrowFrame:ClearAllPoints()
+        arrowFrame:SetPoint("CENTER", iconFrame, "RIGHT", SPEC_CONTROL_GAP + (SPEC_ARROW_SIZE / 2), 0)
+    end
+end
+
+function GQ.Log:EnsureSpecArrow(frame)
+    if frame.tabSpecArrow and frame.tabSpecArrow:GetObjectType() == "Button" then
+        frame.tabSpecArrow:Hide()
+        frame.tabSpecArrow = nil
+    end
+
+    if not frame.tabSpecArrow and frame.tabSpecControl then
+        local arrowFrame = CreateFrame("Frame", nil, frame.tabSpecControl)
+        frame.tabSpecArrow = arrowFrame
+        self:WireSpecArrow(arrowFrame)
+    end
+
+    self:ApplySpecArrowStyle(frame.tabSpecArrow, frame.tabSpecIcon)
+end
+
+function GQ.Log:EnsureSpecControl(frame)
+    if frame.tabSpecControl then
+        frame.tabSpecControl:SetSize(SPEC_CONTROL_WIDTH, SPEC_CONTROL_HEIGHT)
+        self:EnsureSpecArrow(frame)
+        return frame.tabSpecControl
+    end
+
+    if frame.tabSpec then
+        frame.tabSpec:Hide()
+        frame.tabSpec:SetScript("OnClick", nil)
+    end
+
+    local tabBar = frame.tabBar or frame
+    local control = CreateFrame("Frame", "GearQuestLogSpecControl", tabBar)
+    control:SetSize(SPEC_CONTROL_WIDTH, SPEC_CONTROL_HEIGHT)
+    control:Hide()
+
+    local iconFrame = CreateFrame("Frame", nil, control)
+    iconFrame:SetSize(SPEC_ICON_SIZE, SPEC_ICON_SIZE)
+    iconFrame:SetPoint("LEFT", control, "LEFT", 0, 0)
+    iconFrame:EnableMouse(true)
+
+    iconFrame.border = iconFrame:CreateTexture(nil, "OVERLAY")
+    iconFrame.border:SetAllPoints()
+    iconFrame.border:SetTexture("Interface\\Common\\WhiteIconFrame")
+
+    iconFrame.icon = iconFrame:CreateTexture(nil, "ARTWORK")
+    iconFrame.icon:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", 1, -1)
+    iconFrame.icon:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", -1, 1)
+
+    iconFrame:SetScript("OnEnter", function(self)
+        if not GQ.Spec then
+            return
+        end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(GQ.Spec:GetSelectedSpecLabel(), 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    iconFrame:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    local arrowFrame = CreateFrame("Frame", nil, control)
+    frame.tabSpecArrow = arrowFrame
+    self:ApplySpecArrowStyle(arrowFrame, iconFrame)
+    self:WireSpecArrow(arrowFrame)
+
+    frame.tabSpecControl = control
+    frame.tabSpecIcon = iconFrame
+    frame.tabSpecArrow = arrowBtn
+    return control
+end
+
+function GQ.Log:RepositionSpecButton(frame)
+    if not frame or not frame.tabBar then
+        return
+    end
+
+    local tabBar = frame.tabBar
+    local tabGroup = tabBar.tabGroup
+    if not tabGroup then
+        return
+    end
+
+    tabBar:SetHeight(TAB_HEIGHT)
+
+    if tabGroup:GetParent() ~= tabBar then
+        tabGroup:SetParent(tabBar)
+    end
+
+    tabGroup:ClearAllPoints()
+    tabGroup:SetSize(TAB_GROUP_WIDTH, TAB_HEIGHT)
+    tabGroup:SetPoint("CENTER", tabBar, "CENTER", 0, 0)
+
+    self:EnsureSpecControl(frame)
+    local control = frame.tabSpecControl
+    if control then
+        if control:GetParent() ~= tabBar then
+            control:SetParent(tabBar)
+        end
+        control:ClearAllPoints()
+        control:SetPoint("BOTTOMRIGHT", tabBar, "TOPRIGHT", -8, -SPEC_ROW_GAP)
+    end
+end
+
 function GQ.Log:UpdateTabVisuals()
     if not self.frame or not self.frame.tabActive then
         return
@@ -1187,6 +1540,30 @@ function GQ.Log:UpdateTabVisuals()
     local activeSelected = tab == "active"
     self.frame.tabActive:SetEnabled(not activeSelected)
     self.frame.tabCompleted:SetEnabled(activeSelected)
+    self:UpdateSpecButton()
+end
+
+function GQ.Log:UpdateSpecButton()
+    if not self.frame then
+        return
+    end
+
+    self:EnsureSpecControl(self.frame)
+    local control = self.frame.tabSpecControl
+    if not control then
+        return
+    end
+
+    if GQ.Spec and GQ.Spec.IsActive and GQ.Spec:IsActive() then
+        control:Show()
+        local specId = GQ.Spec:GetEffectiveSpec()
+        if self.frame.tabSpecIcon and self.frame.tabSpecIcon.icon then
+            self.frame.tabSpecIcon.icon:SetTexture(GQ.Spec:GetSpecIcon(specId))
+        end
+    else
+        control:Hide()
+    end
+    self:RepositionSpecButton(self.frame)
 end
 
 function GQ.Log:UpdateFooterButtons()
@@ -1227,7 +1604,7 @@ function GQ.Log:EnsureTabBar(frame)
         frame.tabBar = tabBar
 
         local tabGroup = CreateFrame("Frame", nil, tabBar)
-        tabGroup:SetSize((88 * 2) + 4, TAB_HEIGHT)
+        tabGroup:SetSize(TAB_GROUP_WIDTH, TAB_HEIGHT)
         tabGroup:SetPoint("CENTER", tabBar, "CENTER", 0, 0)
         tabBar.tabGroup = tabGroup
 
@@ -1246,6 +1623,7 @@ function GQ.Log:EnsureTabBar(frame)
         tabActive:SetScript("OnClick", function()
             local log = _G.GearQuest and _G.GearQuest.Log
             if log then
+                log:HideSpecPicker()
                 log:SetListTab("active")
             end
         end)
@@ -1253,10 +1631,17 @@ function GQ.Log:EnsureTabBar(frame)
         tabCompleted:SetScript("OnClick", function()
             local log = _G.GearQuest and _G.GearQuest.Log
             if log then
+                log:HideSpecPicker()
                 log:SetListTab("completed")
             end
         end)
     end
+
+    if frame.tabBar and not frame.tabSpecControl then
+        self:EnsureSpecControl(frame)
+    end
+
+    self:RepositionSpecButton(frame)
 
     frame.tabBar:ClearAllPoints()
     if frame.tabBar:GetParent() ~= frame then
@@ -1852,7 +2237,10 @@ function GQ.Log:Show()
 end
 
 function GQ.Log:Hide()
-    self.frame:Hide()
+    self:HideSpecPicker()
+    if self.frame then
+        self.frame:Hide()
+    end
 end
 
 function GQ.Log:Toggle()

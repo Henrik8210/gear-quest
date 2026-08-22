@@ -8,6 +8,7 @@ local PREVIEW_PREFIXES = {
     "level ",
     "lvl ",
     "faction ",
+    "spec ",
     "preview ",
 }
 

@@ -76,6 +76,7 @@ function GQ:PLAYER_LOGIN()
     local previewNote = self.Preview:IsEnabled() and (" (" .. self:GetPreviewLabel() .. ")") or ""
     print("|cff66ccffGearQuest|r v" .. self.VERSION .. " loaded" .. previewNote .. ". Right-click a gear slot on your character panel, or |cff00ff00/gq|r.")
     print("|cff66ccffGearQuest|r: Configure test character with |cff00ff00/gq set|r (class, level, faction).")
+    self:CheckLevelMilestones(nil, self:GetEffectiveLevel())
     self.Log:ScheduleAutoCompletionCheck()
 end
 
@@ -132,10 +133,66 @@ function GQ:RefreshUI()
     end
 end
 
+function GQ:NotifyMilestoneOnce(key, message)
+    GearQuestDB.settings = GearQuestDB.settings or {}
+    GearQuestDB.settings.milestones = GearQuestDB.settings.milestones or {}
+    local milestones = GearQuestDB.settings.milestones
+
+    -- Legacy key from first ring-slot message.
+    if key == "ringSlot1" and milestones.ringSlots then
+        milestones.ringSlot1 = true
+    end
+
+    if milestones[key] then
+        return
+    end
+
+    milestones[key] = true
+    print(message)
+end
+
+function GQ:CheckLevelMilestones(previousLevel, newLevel)
+    -- Slot unlock messages — see docs/DATA_RULES.md § Slot unlock & level-up messages.
+    if not newLevel then
+        return
+    end
+
+    previousLevel = previousLevel or 0
+
+    -- Level 9 band: one Finger entry (Minor Channeling Ring) — first ring slot.
+    if newLevel >= 9 and previousLevel < 9 then
+        self:NotifyMilestoneOnce(
+            "ringSlot1",
+            "|cff66ccffGearQuest|r: You've reached level 9 — one of your ring slots is now eligible for an upgrade! Open |cff00ff00/gq log|r to browse finger upgrades."
+        )
+    end
+
+    -- Set GQ.Data.RING_SLOT_2_MILESTONE_LEVEL when a second Finger upgrade is added to Data.lua.
+    local ringSlot2Level = GQ.Data and GQ.Data.RING_SLOT_2_MILESTONE_LEVEL
+    if ringSlot2Level and newLevel >= ringSlot2Level and previousLevel < ringSlot2Level then
+        self:NotifyMilestoneOnce(
+            "ringSlot2",
+            "|cff66ccffGearQuest|r: You've reached level " .. ringSlot2Level .. " — your other ring slot is now eligible for an upgrade! Open |cff00ff00/gq log|r to browse finger upgrades."
+        )
+    end
+
+    -- Level 10: talent specs — log button and /gq spec filter gear lists.
+    if newLevel >= 10 and previousLevel < 10 then
+        if GQ.Spec and GQ.Spec.HasSpecs and GQ.Spec:HasSpecs(GQ:GetEffectiveClass()) then
+            self:NotifyMilestoneOnce(
+                "specSwitch",
+                "|cff66ccffGearQuest|r: Congratulations — you've reached level 10! Specializations are now available in GearQuest. Open |cff00ff00/gq log|r to browse spec-specific upgrades; |cff00ff00Retribution|r is selected by default."
+            )
+        end
+    end
+end
+
 function GQ:PLAYER_LEVEL_UP(_, newLevel)
+    local previousLevel = newLevel and (newLevel - 1) or nil
     if newLevel and not self:IsPreviewEnabled() then
         self._playerLevelOverride = newLevel
     end
+    self:CheckLevelMilestones(previousLevel, newLevel)
     self:RefreshUI()
 end
 

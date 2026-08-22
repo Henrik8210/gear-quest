@@ -18,7 +18,16 @@ local LEVEL7_MIN = 7
 local LEVEL7_MAX = 12
 local LEVEL8_MIN = 8
 local LEVEL8_MAX = 12
+local LEVEL9_MIN = 9
+local LEVEL9_MAX = 14
 local MAIL_MELEE = ALLIANCE_MAIL
+local SPEC_MELEE = { retribution = true, protection = true }
+local SPEC_HOLY = { holy = true }
+local SPEC_PROT = { protection = true }
+
+-- When a second Finger entry is added to a later level band, set this to that band's
+-- minLevel so Core.lua fires the "other ring slot" milestone message (ringSlot2).
+GQ.Data.RING_SLOT_2_MILESTONE_LEVEL = nil
 
 -- Crafted output names for trainer matching when GetItemInfo is not cached yet.
 local PROFESSION_ITEM_NAMES = {
@@ -1883,6 +1892,447 @@ GQ.Data.entries = {
         zone = "Elwynn Forest",
     },
 
+    -- Level 9 band — Head unchanged (early4_all_head_*). Finger and Shoulder unlock at 9.
+
+    -- Shoulder — Alliance mail melee (level 9)
+    {
+        id = "early9_shoulder_durable_chain_shoulders",
+        itemId = 6189,
+        slot = "Shoulder",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete WANTED: Chok'sul in Loch Modan and choose Durable Chain Shoulders over Kimbra Boots. Minor Channeling Ring is a bonus reward on the same turn-in.",
+        zone = "Loch Modan",
+        npc = "Magistrate Bluntnose",
+        questName = "WANTED: Chok'sul",
+    },
+
+    -- Back — Alliance, all classes (level 9; unchanged from level 8)
+    {
+        id = "early9_back_embossed_leather_cloak",
+        itemId = 2310,
+        slot = "Back",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        factions = ALLIANCE,
+        curatedRank = 1,
+        sourceType = "profession",
+        profession = "Leatherworking",
+        instructions = "Learn Embossed Leather Cloak from a Leatherworking trainer and craft at a workbench (Leatherworking 60). +1 Stamina.",
+        zone = "Stormwind City",
+    },
+    {
+        id = "early9_back_brackwater_cloak",
+        itemId = 4680,
+        slot = "Back",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        factions = ALLIANCE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Brackwater Cloak (req 8, 12 armor) is a common world drop from humanoids in low-level Alliance zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early9_back_hunting_cloak",
+        itemId = 4689,
+        slot = "Back",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        factions = ALLIANCE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Hunting Cloak (req 8, 12 armor) is a common world drop from humanoids in starter zones.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Chest — Alliance mail melee (level 9)
+    {
+        id = "early9_chest_infantry_tunic",
+        itemId = 6336,
+        slot = "Chest",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "world_drop",
+        instructions = "Infantry Tunic (req 8) is a green mail world drop with random Strength or Stamina bonuses.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early9_chest_dargols_hauberk",
+        itemId = 3330,
+        slot = "Chest",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 2,
+        sourceType = "boss_drop",
+        instructions = "Farm Dargol's Hauberk (+2 Strength, +1 Stamina) from Captain Dargol in the Agamand Family Crypt in Tirisfal Glades (~2% drop).",
+        zone = "Tirisfal Glades",
+        npc = "Captain Dargol",
+    },
+    {
+        id = "early9_chest_ironheart_chain",
+        itemId = 3166,
+        slot = "Chest",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "quest_reward",
+        instructions = "Complete Filthy Paws in Loch Modan — collect 4 Miners' Gear from Silver Stream Mine and return to Mountaineer Stormpike. Choose Ironheart Chain over Ironplate Buckler and Robe of the Keeper.",
+        zone = "Loch Modan",
+        npc = "Mountaineer Stormpike",
+        questName = "Filthy Paws",
+    },
+
+    -- Wrist — Alliance mail melee (level 9)
+    {
+        id = "early9_wrist_ridgeback_bracers",
+        itemId = 15403,
+        slot = "Wrist",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_HOLY,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete WANTED: Murkdeep! in Darkshore and choose Ridgeback Bracers over Timberland Armguards or Breakwater Girdle.",
+        zone = "Darkshore",
+        questName = "WANTED: Murkdeep!",
+    },
+    {
+        id = "early9_wrist_timberland_armguards",
+        itemId = 5315,
+        slot = "Wrist",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_HOLY,
+        curatedRank = 2,
+        sourceType = "quest_reward",
+        instructions = "Complete WANTED: Murkdeep! in Darkshore and choose Timberland Armguards over Ridgeback Bracers or Breakwater Girdle.",
+        zone = "Darkshore",
+        questName = "WANTED: Murkdeep!",
+    },
+    {
+        id = "early9_wrist_veteran_bracers",
+        itemId = 3213,
+        slot = "Wrist",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Veteran Bracers (req 8) are a common mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Main Hand — Alliance mail melee (level 9)
+    {
+        id = "early9_mainhand_edge_of_peoples_militia",
+        itemId = 1566,
+        slot = "MainHand",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Finish The People's Militia quest chain in Westfall (three parts from Gryan Stoutmantle at Sentinel Hill) and choose Edge of the People's Militia (+5 Stamina) over the other weapons. Train Two-Handed Swords first.",
+        zone = "Westfall",
+        npc = "Gryan Stoutmantle",
+        questName = "The People's Militia",
+    },
+    {
+        id = "early9_mainhand_spiked_club",
+        itemId = 4564,
+        slot = "MainHand",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Spiked Club (req 8) is a green two-handed mace world drop with random stat bonuses. Train Two-Handed Maces first.",
+        zone = "Westfall",
+    },
+    {
+        id = "early9_mainhand_copper_battle_axe",
+        itemId = 3488,
+        slot = "MainHand",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "profession",
+        profession = "Blacksmithing",
+        instructions = "Learn Copper Battle Axe from a Blacksmithing trainer and craft at an anvil (Blacksmithing 35). Train Two-Handed Axes first.",
+        zone = "Stormwind City",
+    },
+
+    -- Off Hand — Alliance mail melee (level 9)
+    {
+        id = "early9_offhand_peacekeepers_buckler",
+        itemId = 27400,
+        slot = "SecondaryHand",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete WANTED: Deathclaw on Bloodmyst Isle — kill Deathclaw and turn in his paw for Peacekeeper's Buckler (+1 Strength, +2 Stamina).",
+        zone = "Bloodmyst Isle",
+        questName = "WANTED: Deathclaw",
+    },
+    {
+        id = "early9_offhand_ironplate_buckler",
+        itemId = 3160,
+        slot = "SecondaryHand",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_PROT,
+        curatedRank = 2,
+        sourceType = "quest_reward",
+        instructions = "Complete Filthy Paws in Loch Modan and choose Ironplate Buckler over Ironheart Chain and Robe of the Keeper.",
+        zone = "Loch Modan",
+        npc = "Mountaineer Stormpike",
+        questName = "Filthy Paws",
+    },
+    {
+        id = "early9_offhand_cadet_shield",
+        itemId = 9764,
+        slot = "SecondaryHand",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Cadet Shield (req 8) is a green shield world drop with random stat bonuses.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Finger — Alliance mail melee (level 9)
+    {
+        id = "early9_finger_minor_channeling_ring",
+        itemId = 1449,
+        slot = "Finger",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_HOLY,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete WANTED: Chok'sul in Loch Modan — kill Chok'sul and turn in his head to Magistrate Bluntnose in Thelsamar. Minor Channeling Ring (+2 Intellect) is a bonus reward in addition to your shoulder or boot choice.",
+        zone = "Loch Modan",
+        npc = "Magistrate Bluntnose",
+        questName = "WANTED: Chok'sul",
+    },
+
+    -- Feet — Alliance mail melee (level 9)
+    {
+        id = "early9_feet_padded_lamellar_boots",
+        itemId = 5320,
+        slot = "Feet",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete Stolen Booty in Ratchet (The Barrens) — recover the Shipment of Boots and Telescopic Lens from the Southsea pirates and choose Padded Lamellar Boots (+2 Strength, +2 Stamina) over Wayfaring Gloves.",
+        zone = "The Barrens",
+        npc = "Gazlowe",
+        questName = "Stolen Booty",
+    },
+    {
+        id = "early9_feet_kimbra_boots",
+        itemId = 6191,
+        slot = "Feet",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 2,
+        sourceType = "quest_reward",
+        instructions = "Complete WANTED: Chok'sul in Loch Modan and choose Kimbra Boots over Durable Chain Shoulders. Minor Channeling Ring is a bonus reward on the same turn-in.",
+        zone = "Loch Modan",
+        npc = "Magistrate Bluntnose",
+        questName = "WANTED: Chok'sul",
+    },
+    {
+        id = "early9_feet_veteran_boots",
+        itemId = 2979,
+        slot = "Feet",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Veteran Boots (req 9) are a common mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Legs — Alliance mail melee (level 9)
+    {
+        id = "early9_legs_war_torn_pants",
+        itemId = 15485,
+        slot = "Legs",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "world_drop",
+        instructions = "War-Torn Pants (req 9) are a green mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early9_legs_cadet_leggings",
+        itemId = 9763,
+        slot = "Legs",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Cadet Leggings (req 9) are a common mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early9_legs_runed_copper_pants",
+        itemId = 3473,
+        slot = "Legs",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "profession",
+        profession = "Blacksmithing",
+        instructions = "Learn Runed Copper Pants from a Blacksmithing trainer and craft at an anvil (Blacksmithing 45). +2 Strength, +2 Stamina.",
+        zone = "Stormwind City",
+    },
+
+    -- Waist — Alliance mail melee (level 9)
+    {
+        id = "early9_waist_breakwater_girdle",
+        itemId = 15404,
+        slot = "Waist",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete WANTED: Murkdeep! in Darkshore and choose Breakwater Girdle over Ridgeback Bracers or Timberland Armguards.",
+        zone = "Darkshore",
+        questName = "WANTED: Murkdeep!",
+    },
+    {
+        id = "early9_waist_veteran_girdle",
+        itemId = 4678,
+        slot = "Waist",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Veteran Girdle (req 9) is a common mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early9_waist_belt_of_peoples_militia",
+        itemId = 1154,
+        slot = "Waist",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "quest_reward",
+        instructions = "Complete Patrolling Westfall on Sentinel Hill and choose Belt of the People's Militia over Bracers of the People's Militia.",
+        zone = "Westfall",
+        npc = "Captain Danuvin",
+        questName = "Patrolling Westfall",
+    },
+
+    -- Hands — Alliance mail melee (level 9)
+    {
+        id = "early9_hands_brackwater_gauntlets",
+        itemId = 3304,
+        slot = "Hands",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 1,
+        sourceType = "world_drop",
+        instructions = "Brackwater Gauntlets (req 9) are a common mail world drop from humanoids in starter zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early9_hands_wayfaring_gloves",
+        itemId = 5337,
+        slot = "Hands",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        specs = SPEC_HOLY,
+        curatedRank = 2,
+        sourceType = "quest_reward",
+        instructions = "Complete Stolen Booty in Ratchet and choose Wayfaring Gloves over Padded Lamellar Boots.",
+        zone = "The Barrens",
+        npc = "Gazlowe",
+        questName = "Stolen Booty",
+    },
+    {
+        id = "early9_hands_cadet_gauntlets",
+        itemId = 9762,
+        slot = "Hands",
+        minLevel = LEVEL9_MIN,
+        maxLevel = LEVEL9_MAX,
+        classes = MAIL_MELEE,
+        specs = SPEC_MELEE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Cadet Gauntlets (req 8) are a common mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+
     -- Later Alliance leveling (unchanged horizon)
     {
         id = "early_chest_tunic_westfall",
@@ -2039,6 +2489,14 @@ function GQ.Data:GetEntryById(id)
 end
 
 function GQ.Data:EntryMatchesPlayerBand(entry)
+    if not entry or not entry.slot then
+        return false
+    end
+
+    if not self:IsSlotUnlocked(entry.slot) then
+        return false
+    end
+
     local classFile = GQ:GetEffectiveClass()
     if entry.classes and not entry.classes[classFile] then
         return false
@@ -2050,6 +2508,10 @@ function GQ.Data:EntryMatchesPlayerBand(entry)
     end
 
     if not GQ.Equip:EntryWithinLevelBand(entry) then
+        return false
+    end
+
+    if GQ.Equip.EntryMatchesSpec and not GQ.Equip:EntryMatchesSpec(entry) then
         return false
     end
 
@@ -2153,14 +2615,9 @@ function GQ.Data:GetCandidatesForSlot(slotName)
 
     results = self:FilterToActiveBand(results)
 
-    local filtered = {}
-    for _, entry in ipairs(results) do
-        if GQ.Equip:EntryMatchesItemRules(entry) then
-            table.insert(filtered, entry)
-        end
-    end
-
-    return filtered
+    -- Curated band entries are hunt targets; do not hide them for item req level or
+    -- weapon skill until a later band replaces them (see EntryMatchesPlayer for obtain checks).
+    return results
 end
 
 GQ.Data.SLOT_LABELS = {
@@ -2194,13 +2651,29 @@ GQ.Data.CLASS_RANGED = {
     WARLOCK = true,
 }
 
+-- GearQuest log/popup slots that unlock at specific character levels.
+-- Milestone chat messages for these slots: see docs/DATA_RULES.md § Slot unlock & level-up messages.
+GQ.Data.SLOT_UNLOCK_LEVEL = {
+    Finger = 9,
+    Shoulder = 9,
+}
+
+function GQ.Data:GetSlotUnlockLevel(slotName)
+    slotName = self:NormalizeSlotName(slotName)
+    return self.SLOT_UNLOCK_LEVEL[slotName] or 1
+end
+
+function GQ.Data:IsSlotUnlocked(slotName)
+    return GQ:GetEffectiveLevel() >= self:GetSlotUnlockLevel(slotName)
+end
+
 function GQ.Data:GetSlotsForClass(classFile)
     local slots = {}
     local seen = {}
 
     for _, slotName in ipairs(self.BASE_SLOTS) do
         slotName = self:NormalizeSlotName(slotName)
-        if not seen[slotName] then
+        if not seen[slotName] and self:IsSlotUnlocked(slotName) then
             seen[slotName] = true
             table.insert(slots, slotName)
         end

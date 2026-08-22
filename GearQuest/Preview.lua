@@ -105,11 +105,16 @@ function GQ.Preview:SetClass(classFile)
 end
 
 function GQ.Preview:SetLevel(level)
+    local previousLevel = self:GetSettings().level
     level = tonumber(level)
     if not level or level < 1 or level > 70 then
         return false, "Level must be a number between 1 and 70."
     end
-    self:GetSettings().level = math.floor(level)
+    level = math.floor(level)
+    self:GetSettings().level = level
+    if GQ.CheckLevelMilestones then
+        GQ:CheckLevelMilestones(previousLevel, level)
+    end
     return true
 end
 
@@ -155,43 +160,10 @@ function GQ.Preview:GetEffectiveFaction()
     return UnitFactionGroup("player") or "Alliance"
 end
 
-local PALADIN_SPEC_BY_TAB = {
-    [1] = "holy",
-    [2] = "protection",
-    [3] = "retribution",
-}
-
 function GQ.Preview:GetEffectiveSpec()
-    local level = self:GetEffectiveLevel()
-    if level < 10 then
-        return nil
+    if GQ.Spec and GQ.Spec.GetEffectiveSpec then
+        return GQ.Spec:GetEffectiveSpec()
     end
-
-    local preview = self:GetSettings()
-    if preview.spec then
-        return preview.spec
-    end
-
-    if self:IsEnabled() then
-        return nil
-    end
-
-    local _, classFile = UnitClass("player")
-    if classFile == "PALADIN" and GetTalentTabInfo then
-        local bestTab, bestPoints = nil, 0
-        for tab = 1, 3 do
-            local _, _, points = GetTalentTabInfo(tab)
-            points = points or 0
-            if points > bestPoints then
-                bestPoints = points
-                bestTab = tab
-            end
-        end
-        if bestTab and bestPoints > 0 then
-            return PALADIN_SPEC_BY_TAB[bestTab]
-        end
-    end
-
     return nil
 end
 
@@ -215,21 +187,31 @@ end
 function GQ.Preview:PrintNowViewing()
     if not self:IsEnabled() then
         local _, classFile = UnitClass("player")
+        local specSuffix = ""
+        if GQ.Spec and GQ.Spec.IsActive and GQ.Spec:IsActive() then
+            specSuffix = string.format(", %s", GQ.Spec:GetSelectedSpecLabel())
+        end
         print(string.format(
-            "|cff66ccffGearQuest|r: Now viewing upgrades as |cff00ff00your character|r — level %d %s (%s).",
+            "|cff66ccffGearQuest|r: Now viewing upgrades as |cff00ff00your character|r — level %d %s (%s%s).",
             UnitLevel("player"),
             self:FormatClassName(classFile),
-            UnitFactionGroup("player") or "?"
+            UnitFactionGroup("player") or "?",
+            specSuffix
         ))
         return
     end
 
     local preview = self:GetSettings()
+    local specSuffix = ""
+    if GQ.Spec and GQ.Spec.IsActive and GQ.Spec:IsActive() then
+        specSuffix = string.format(", %s", GQ.Spec:GetSelectedSpecLabel())
+    end
     print(string.format(
-        "|cff66ccffGearQuest|r: Now viewing upgrades as a |cff00ff00level %d %s|r (%s).",
+        "|cff66ccffGearQuest|r: Now viewing upgrades as a |cff00ff00level %d %s|r (%s%s).",
         preview.level,
         self:FormatClassName(preview.class),
-        preview.faction
+        preview.faction,
+        specSuffix
     ))
 end
 
@@ -241,6 +223,7 @@ function GQ.Preview:PrintHelp()
     print("  |cff00ff00/gq faction alliance|r — set preview faction")
     print("  |cff00ff00/gq set on|r / |cff00ff00/gq set off|r — enable or disable preview")
     print("  |cff00ff00/gq set me|r — copy your real character into preview")
+    print("  |cff00ff00/gq spec holy|r — set specialization (level 10+, paladin)")
     print("  |cff00ff00/gq log|r — toggle GearQuest log window")
     print("  |cff00ff00/gq wipe data|r — reset hunt progress (for testing obtain/toast)")
 end
@@ -343,6 +326,9 @@ function GQ.Preview:HandleCommand(msg)
         local ok, err = self:SetLevel(value)
         if ok then
             self:PrintNowViewing()
+            if GQ.RefreshUI then
+                GQ:RefreshUI()
+            end
         else
             print("|cff66ccffGearQuest|r: " .. err)
         end
@@ -353,8 +339,26 @@ function GQ.Preview:HandleCommand(msg)
         local ok, err = self:SetFaction(value)
         if ok then
             self:PrintNowViewing()
+            if GQ.RefreshUI then
+                GQ:RefreshUI()
+            end
         else
             print("|cff66ccffGearQuest|r: " .. err)
+        end
+        return
+    end
+
+    if key == "spec" or key == "specialization" or key == "talent" then
+        if GQ.Spec and GQ.Spec.SetSelectedSpec then
+            local ok, err = GQ.Spec:SetSelectedSpec(value)
+            if ok then
+                print(string.format(
+                    "|cff66ccffGearQuest|r: Now viewing |cff00ff00%s|r upgrades.",
+                    GQ.Spec:GetSelectedSpecLabel()
+                ))
+            else
+                print("|cff66ccffGearQuest|r: " .. (err or "Could not set specialization."))
+            end
         end
         return
     end
