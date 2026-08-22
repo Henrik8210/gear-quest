@@ -15,6 +15,19 @@ local animState
 local animStart
 local hoverPaused = false
 
+local function PlayQuestCompleteSound()
+    if not PlaySound then
+        return
+    end
+
+    if SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE then
+        PlaySound(SOUNDKIT.IG_QUEST_LIST_COMPLETE)
+        return
+    end
+
+    PlaySound("igQuestListComplete")
+end
+
 local function EnsureFrame()
     if toastFrame then
         return toastFrame
@@ -51,15 +64,34 @@ local function EnsureFrame()
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.title:SetPoint("TOPLEFT", frame.icon, "TOPRIGHT", 10, -2)
-    frame.title:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+    frame.title:SetPoint("RIGHT", frame, "RIGHT", -22, 0)
     frame.title:SetJustifyH("LEFT")
     frame.title:SetText("|cffffd200BiS upgrade obtained!|r")
 
     frame.subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     frame.subtitle:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -2)
-    frame.subtitle:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+    frame.subtitle:SetPoint("RIGHT", frame, "RIGHT", -22, 0)
     frame.subtitle:SetJustifyH("LEFT")
     frame.subtitle:SetTextColor(0.85, 0.85, 0.85)
+
+    frame.closeButton = CreateFrame("Button", nil, frame)
+    frame.closeButton:SetSize(18, 18)
+    frame.closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    frame.closeButton:SetNormalFontObject("GameFontNormal")
+    frame.closeButton:SetHighlightFontObject("GameFontHighlight")
+    frame.closeButton:SetText("×")
+    frame.closeButton:GetFontString():SetTextColor(0.75, 0.75, 0.75)
+    frame.closeButton:SetScript("OnClick", function()
+        GQ.Toast:Dismiss()
+    end)
+    frame.closeButton:SetScript("OnEnter", function(self)
+        self:GetFontString():SetTextColor(1, 0.82, 0)
+        GQ.Toast:PauseForHover()
+    end)
+    frame.closeButton:SetScript("OnLeave", function(self)
+        self:GetFontString():SetTextColor(0.75, 0.75, 0.75)
+        GQ.Toast:ResumeFromHover()
+    end)
 
     frame.hint = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.hint:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 6)
@@ -160,6 +192,19 @@ function GQ.Toast:ApplyEntryVisuals(entry)
     frame.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
 end
 
+function GQ.Toast:SetCloseEnabled(enabled)
+    local frame = toastFrame
+    if frame and frame.closeButton then
+        if enabled then
+            frame.closeButton:Show()
+            frame.closeButton:Enable()
+        else
+            frame.closeButton:Disable()
+            frame.closeButton:Hide()
+        end
+    end
+end
+
 function GQ.Toast:BeginFadeIn()
     local frame = EnsureFrame()
     hoverPaused = false
@@ -168,6 +213,8 @@ function GQ.Toast:BeginFadeIn()
     frame:SetAlpha(0)
     frame:Show()
     frame:EnableMouse(false)
+    self:SetCloseEnabled(true)
+    PlayQuestCompleteSound()
 end
 
 function GQ.Toast:BeginHold()
@@ -176,6 +223,7 @@ function GQ.Toast:BeginHold()
     animStart = GetTime()
     frame:SetAlpha(1)
     frame:EnableMouse(true)
+    self:SetCloseEnabled(true)
 end
 
 function GQ.Toast:BeginFadeOut()
@@ -183,6 +231,7 @@ function GQ.Toast:BeginFadeOut()
     animState = "out"
     animStart = GetTime()
     frame:EnableMouse(false)
+    self:SetCloseEnabled(true)
 end
 
 function GQ.Toast:FinishCurrent()
@@ -190,6 +239,7 @@ function GQ.Toast:FinishCurrent()
     frame:Hide()
     frame:SetAlpha(0)
     frame.entryId = nil
+    self:SetCloseEnabled(false)
     animState = nil
     animStart = nil
     hoverPaused = false
@@ -255,6 +305,17 @@ function GQ.Toast:ShowForEntry(entry)
 
     table.insert(queue, entry)
     self:ShowNext()
+end
+
+function GQ.Toast:ClearQueue()
+    wipe(queue)
+    hoverPaused = false
+    animState = nil
+    animStart = nil
+    self:FinishCurrent()
+    if toastFrame then
+        toastFrame:Hide()
+    end
 end
 
 function GQ.Toast:Dismiss()

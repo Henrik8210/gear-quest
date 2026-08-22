@@ -65,6 +65,15 @@ You do not need all five in every slot, but do not stop after vendors alone if a
 
 For **profession** entries, also set optional `profession = "Blacksmithing"` (or Tailoring, Leatherworking, …) and mention the trainer, recipe, and where to craft in `instructions`. The hunt completes only when the player **crafts** the output item (`itemId`), not when they learn the recipe alone.
 
+**Profession learnable upgrades — green arrows (automatic):** Any entry with `sourceType = "profession"` whose output is a **top-3 upgrade** for the player’s class/level automatically gets the green ↑ in **both** places below. No extra flags or per-entry UI config — only correct `itemId`, ranking, and (for new recipes) a row in `PROFESSION_ITEM_NAMES` if name lookup is needed before `GetItemInfo` caches.
+
+| Where | When |
+|-------|------|
+| **Profession trainer** (e.g. Smith Argus) | Player selects the recipe that teaches/crafts that item — arrow on the **bottom inset icon** (`ClassTrainerSkillIcon`). Works **before** the player learns the profession or recipe (name/tooltip match on the crafted item). |
+| **Character’s Trade Skill window** | Player has that profession and selects the recipe — arrow on the **bottom inset icon** (`TradeSkillSkillIcon`). Same crafted `itemId` as the hunt entry. |
+
+Applies to every crafting profession GearQuest indexes (Blacksmithing, Tailoring, Leatherworking, etc.) for any recipe whose **output item** is in the current top 3. The addon matches by **item name / item ID**, not by trainer NPC — any trainer that lists that recipe name gets the arrow when it is selected.
+
 ### Armor type (class best tier)
 
 Prefer the **highest armor tier the class can wear** at that level:

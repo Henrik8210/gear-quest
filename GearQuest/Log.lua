@@ -942,6 +942,29 @@ function GQ.Log:AbandonHunt(id)
     self:RequestUntrackHunt(id)
 end
 
+function GQ.Log:WipeCharacterData()
+    GearQuestDB.hunts = {}
+    GearQuestDB.obtained = {}
+    GearQuestDB.crafted = {}
+    GearQuestDB.dismissedCompleted = {}
+
+    self.selectedHuntId = nil
+    self:ClearDetail()
+    self:SetListTab("active")
+
+    if GQ.Toast and GQ.Toast.ClearQueue then
+        GQ.Toast:ClearQueue()
+    end
+
+    self:Refresh()
+    if GQ.Tracker then
+        GQ.Tracker:Refresh()
+    end
+    if GQ.RefreshUI then
+        GQ:RefreshUI()
+    end
+end
+
 function GQ.Log:CheckAutoCompletion()
     local changed = false
 
@@ -1557,7 +1580,7 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
 
         if status == "completed" then
             row.text:SetText(name)
-            row.text:SetTextColor(0.55, 0.55, 0.55)
+            row.text:SetTextColor(r, g, b)
         elseif status == "tracked" then
             row.text:SetText(FormatActiveListItemText(name, entry, status, showNewLabel))
             row.text:SetTextColor(r, g, b)

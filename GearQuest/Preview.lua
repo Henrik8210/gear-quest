@@ -242,6 +242,7 @@ function GQ.Preview:PrintHelp()
     print("  |cff00ff00/gq set on|r / |cff00ff00/gq set off|r — enable or disable preview")
     print("  |cff00ff00/gq set me|r — copy your real character into preview")
     print("  |cff00ff00/gq log|r — toggle GearQuest log window")
+    print("  |cff00ff00/gq wipe data|r — reset hunt progress (for testing obtain/toast)")
 end
 
 function GQ.Preview:PrintStatus()
