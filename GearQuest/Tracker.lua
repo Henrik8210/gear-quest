@@ -25,6 +25,8 @@ local SCROLLBAR_MIN_THUMB = 18
 local SCROLL_STEP = 24
 local ROW_TOOLTIP_STILL_DELAY = 3
 local ROW_TOOLTIP_MOVE_THRESHOLD = 1
+local COLLAPSE_BUTTON_SIZE = 16
+local COLLAPSED_HEIGHT_PAD = 4
 
 local function NormalizeHuntStatus(status)
     if status == "active" then
@@ -197,14 +199,21 @@ function GQ.Tracker:RestorePosition()
     end
 end
 
-function GQ.Tracker:SetFrameSize(width, height)
+function GQ.Tracker:SetFrameSize(width, height, opts)
     if not self.frame then
         return
     end
 
-    width, height = ClampSize(width, height)
+    opts = opts or {}
     local top = self.frame:GetTop()
     local left = self.frame:GetLeft()
+
+    if opts.collapsed then
+        width = math.min(MAX_WIDTH, math.max(MIN_WIDTH, width or DEFAULT_WIDTH))
+        height = math.max(self:GetCollapsedHeight(), height or self:GetCollapsedHeight())
+    else
+        width, height = ClampSize(width, height)
+    end
 
     self.frame:SetSize(width, height)
 
@@ -220,11 +229,170 @@ function GQ.Tracker:GetScrollGutter()
     return SCROLLBAR_WIDTH + SCROLLBAR_PAD
 end
 
+function GQ.Tracker:IsCollapsed()
+    return GearQuestDB.settings and GearQuestDB.settings.trackerCollapsed == true
+end
+
+function GQ.Tracker:SetCollapsed(collapsed)
+    GearQuestDB.settings = GearQuestDB.settings or {}
+    local wasCollapsed = self:IsCollapsed()
+
+    if collapsed and not wasCollapsed and self.frame then
+        local width, height = self.frame:GetSize()
+        self:SaveSize(width, height)
+    end
+
+    GearQuestDB.settings.trackerCollapsed = collapsed and true or false
+
+    if wasCollapsed and not collapsed then
+        self:BeginExpand()
+        return
+    end
+
+    self:Refresh()
+end
+
+function GQ.Tracker:CancelExpandLayoutTimer()
+    if not self.expandLayoutTimer then
+        return
+    end
+
+    if self.expandLayoutTimer.Cancel then
+        self.expandLayoutTimer:Cancel()
+    end
+    self.expandLayoutTimer = nil
+end
+
+function GQ.Tracker:BeginExpand()
+    if not self.frame then
+        return
+    end
+
+    self:CancelExpandLayoutTimer()
+
+    local entries = self:GetTrackedEntries()
+    if #entries == 0 then
+        self.frame:Hide()
+        return
+    end
+
+    local width, height = self:GetSavedSize()
+    width = self:ApplyFrameWidth(width)
+    self.title:SetText(TITLE_TEXT)
+    self:UpdateCollapseButton()
+    width, height = self:SetFrameSize(width, height)
+    self:UpdateCollapseVisuals()
+    self.frame:Show()
+
+    if C_Timer and C_Timer.After then
+        self.expandLayoutTimer = C_Timer.After(0, function()
+            GQ.Tracker.expandLayoutTimer = nil
+            if GQ.Tracker.frame and not GQ.Tracker:IsCollapsed() then
+                GQ.Tracker:Refresh()
+            end
+        end)
+    else
+        self:Refresh()
+    end
+end
+
+function GQ.Tracker:ToggleCollapsed()
+    self:SetCollapsed(not self:IsCollapsed())
+end
+
+function GQ.Tracker:GetCollapsedHeight()
+    local titleHeight = 14
+    if self.title and self.title.GetStringHeight then
+        titleHeight = self.title:GetStringHeight() or titleHeight
+    end
+    return titleHeight + COLLAPSED_HEIGHT_PAD
+end
+
+function GQ.Tracker:UpdateCollapseButton()
+    if not self.collapseBtn then
+        return
+    end
+
+    local collapsed = self:IsCollapsed()
+    self.collapseBtn:SetNormalTexture(
+        collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up"
+    )
+end
+
+function GQ.Tracker:UpdateCollapseVisuals()
+    local collapsed = self:IsCollapsed()
+
+    self:UpdateCollapseButton()
+
+    if self.scroll then
+        if collapsed then
+            self.scroll:Hide()
+        else
+            self.scroll:Show()
+        end
+    end
+
+    if collapsed then
+        self:HideScrollBar()
+        self:StopResize()
+    end
+
+    if self.resizeHandle then
+        if collapsed then
+            self.resizeHandle:Hide()
+        else
+            self.resizeHandle:Show()
+        end
+    end
+end
+
+function GQ.Tracker:EnsureCollapseButton(frame)
+    if not frame or self.collapseBtn then
+        return
+    end
+
+    local collapseBtn = CreateFrame("Button", nil, frame)
+    collapseBtn:SetSize(COLLAPSE_BUTTON_SIZE, COLLAPSE_BUTTON_SIZE)
+    collapseBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    collapseBtn:SetScript("OnClick", function()
+        GQ.Tracker:ToggleCollapsed()
+    end)
+    collapseBtn:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(collapseBtn, "ANCHOR_RIGHT")
+        if GQ.Tracker:IsCollapsed() then
+            GameTooltip:SetText("Expand tracker", 1, 1, 1)
+        else
+            GameTooltip:SetText("Collapse tracker", 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    collapseBtn:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    frame.collapseBtn = collapseBtn
+    self.collapseBtn = collapseBtn
+
+    if self.title then
+        self.title:ClearAllPoints()
+        self.title:SetPoint("TOPLEFT", collapseBtn, "TOPRIGHT", 2, 0)
+        self.title:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+    end
+
+    if self.dragHandle and self.title then
+        self.dragHandle:ClearAllPoints()
+        self.dragHandle:SetPoint("TOPLEFT", collapseBtn, "TOPLEFT", -2, 2)
+        self.dragHandle:SetPoint("BOTTOMRIGHT", self.title, "BOTTOMRIGHT", 2, -2)
+    end
+
+    self:UpdateCollapseButton()
+end
+
 function GQ.Tracker:ApplyFrameWidth(width)
     width = math.min(MAX_WIDTH, math.max(MIN_WIDTH, width or DEFAULT_WIDTH))
 
     if self.title then
-        self.title:SetWidth(width)
+        self.title:SetWidth(math.max(MIN_WIDTH - COLLAPSE_BUTTON_SIZE - 2, width - COLLAPSE_BUTTON_SIZE - 2))
     end
     if self.scroll then
         self.scroll:SetWidth(width)
@@ -259,7 +427,17 @@ function GQ.Tracker:LayoutEntries(entries, descWordLimit)
 
     for i, entry in ipairs(entries) do
         local row = self.entryRows[i]
-        local itemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
+        if row.cachedEntryId ~= entry.id or not row.cachedItemName then
+            row.cachedEntryId = entry.id
+            row.cachedItemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
+        elseif row.cachedItemName:match("^Item %d+$") then
+            local resolved = GetItemInfo(entry.itemId)
+            if resolved then
+                row.cachedItemName = resolved
+            end
+        end
+
+        local itemName = row.cachedItemName
         local desc = FirstWords(entry.instructions, descWordLimit)
 
         row.name:SetText(itemName)
@@ -712,12 +890,18 @@ function GQ.Tracker:StopResize()
         return
     end
 
+    local wasSizing = self.sizing
+
     if self.sizing then
         self.frame:StopMovingOrSizing()
         self.sizing = false
     end
 
     self:HideResizeBorder()
+
+    if not wasSizing then
+        return
+    end
 
     local width, height = ClampSize(self.frame:GetSize())
     width, height = self:SetFrameSize(width, height)
@@ -757,9 +941,28 @@ function GQ.Tracker:Refresh(widthOverride, heightOverride)
         width, height = self:GetSavedSize()
     end
     width = self:ApplyFrameWidth(width)
+    local collapsed = self:IsCollapsed()
 
     self.title:SetText(TITLE_TEXT)
+    self:UpdateCollapseButton()
 
+    if collapsed then
+        self:UpdateCollapseVisuals()
+        if self.entryRows then
+            for _, row in ipairs(self.entryRows) do
+                row:Hide()
+            end
+        end
+        self:SetFrameSize(width, self:GetCollapsedHeight(), { collapsed = true })
+        self.frame:Show()
+        return
+    end
+
+    if not self.sizing then
+        width, height = self:SetFrameSize(width, height)
+    end
+
+    self:UpdateCollapseVisuals()
     self:EnsureEntryRows(#entries)
 
     local titleHeight = self.title:GetStringHeight() or 14
@@ -801,8 +1004,6 @@ function GQ.Tracker:Refresh(widthOverride, heightOverride)
         if width ~= frameWidth or height ~= frameHeight then
             self:SetFrameSize(width, height)
         end
-    else
-        self:SetFrameSize(width, height)
     end
 
     self.frame:Show()
@@ -825,6 +1026,7 @@ function GQ.Tracker:Init()
         if not self.resizeBorder then
             self.resizeBorder = CreateResizeBorder(self.frame)
         end
+        self:EnsureCollapseButton(self.frame)
         self:EnsureScrollBarHideTicker()
         self:Refresh()
         return
@@ -844,15 +1046,35 @@ function GQ.Tracker:Init()
         "GameFontHighlightLarge",
         "GameFontNormalLarge",
     })
-    title:SetWidth(width)
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    title:SetWidth(width - COLLAPSE_BUTTON_SIZE - 2)
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", COLLAPSE_BUTTON_SIZE + 2, 0)
+    title:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
     title:SetJustifyH("LEFT")
     title:SetWordWrap(true)
     title:SetTextColor(TITLE_COLOR[1], TITLE_COLOR[2], TITLE_COLOR[3])
     title:SetText(TITLE_TEXT)
 
+    local collapseBtn = CreateFrame("Button", nil, frame)
+    collapseBtn:SetSize(COLLAPSE_BUTTON_SIZE, COLLAPSE_BUTTON_SIZE)
+    collapseBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    collapseBtn:SetScript("OnClick", function()
+        GQ.Tracker:ToggleCollapsed()
+    end)
+    collapseBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if GQ.Tracker:IsCollapsed() then
+            GameTooltip:SetText("Expand tracker", 1, 1, 1)
+        else
+            GameTooltip:SetText("Collapse tracker", 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    collapseBtn:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
     local dragHandle = CreateFrame("Frame", nil, frame)
-    dragHandle:SetPoint("TOPLEFT", title, "TOPLEFT", -2, 2)
+    dragHandle:SetPoint("TOPLEFT", collapseBtn, "TOPLEFT", -2, 2)
     dragHandle:SetPoint("BOTTOMRIGHT", title, "BOTTOMRIGHT", 2, -2)
     dragHandle:EnableMouse(true)
     dragHandle:RegisterForDrag("LeftButton")
@@ -924,6 +1146,8 @@ function GQ.Tracker:Init()
 
     self.frame = frame
     self.title = title
+    self.collapseBtn = collapseBtn
+    self.dragHandle = dragHandle
     self.scroll = scroll
     self.contentInner = contentInner
     self.scrollBar = scrollBar
@@ -937,11 +1161,12 @@ function GQ.Tracker:Init()
     local listener = CreateFrame("Frame")
     listener:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     listener:SetScript("OnEvent", function()
-        if GQ.Tracker.frame and GQ.Tracker.frame:IsShown() then
+        if GQ.Tracker.frame and GQ.Tracker.frame:IsShown() and not GQ.Tracker:IsCollapsed() then
             GQ.Tracker:Refresh()
         end
     end)
     self.itemInfoListener = listener
 
+    self:UpdateCollapseButton()
     self:Refresh()
 end

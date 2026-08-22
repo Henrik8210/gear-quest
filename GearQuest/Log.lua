@@ -53,6 +53,16 @@ local function GetHuntRecord(id)
     return GearQuestDB.hunts[id]
 end
 
+local function GetObtainedTimestamp(id)
+    GearQuestDB.obtained = GearQuestDB.obtained or {}
+    return GearQuestDB.obtained[id]
+end
+
+local function IsDismissedCompleted(id)
+    GearQuestDB.dismissedCompleted = GearQuestDB.dismissedCompleted or {}
+    return GearQuestDB.dismissedCompleted[id] == true
+end
+
 local function EnsureHuntRecord(id)
     GearQuestDB.hunts = GearQuestDB.hunts or {}
     if not GearQuestDB.hunts[id] then
@@ -141,6 +151,64 @@ local function PlayerOwnsItem(itemId)
     end)
 
     return ok and owned or false
+end
+
+local function GetCraftedTimestamp(itemId)
+    GearQuestDB.crafted = GearQuestDB.crafted or {}
+    return GearQuestDB.crafted[itemId]
+end
+
+local function ExtractItemIdFromChatMessage(msg)
+    if not msg then
+        return nil
+    end
+
+    local itemId = tonumber(msg:match("item:(%d+)"))
+    if itemId then
+        return itemId
+    end
+
+    if not msg:find("You create", 1, true) then
+        return nil
+    end
+
+    local itemName = msg:match("You create %[(.-)%]")
+        or msg:match("You create (.+)%.")
+    if not itemName then
+        return nil
+    end
+
+    itemName = strtrim(itemName)
+
+    for _, entry in ipairs(GQ.Data.entries) do
+        if entry.sourceType == "profession" and entry.itemId then
+            local name = GetItemInfo(entry.itemId)
+            if name == itemName then
+                return entry.itemId
+            end
+        end
+    end
+
+    return nil
+end
+
+local function PlayerHasProducedProfessionItem(entry)
+    if not entry or entry.sourceType ~= "profession" or not entry.itemId then
+        return false
+    end
+    return GetCraftedTimestamp(entry.itemId) ~= nil
+end
+
+local function PlayerHasObtainedEntryItem(entry)
+    if not entry or not entry.itemId then
+        return false
+    end
+
+    if entry.sourceType == "profession" then
+        return PlayerHasProducedProfessionItem(entry)
+    end
+
+    return PlayerOwnsItem(entry.itemId)
 end
 
 local function FormatActiveListItemText(name, entry, status, includeNewLabel)
@@ -580,12 +648,14 @@ function GQ.Log:GetActiveSlotListEntries(slotName)
     local seen = {}
 
     for _, entry in ipairs(GQ.Data:GetTopUpgradesForSlot(slotName, 3)) do
-        seen[entry.id] = true
-        table.insert(results, entry)
+        if not self:IsEntryObtained(entry.id) then
+            seen[entry.id] = true
+            table.insert(results, entry)
+        end
     end
 
     for id, record in pairs(GearQuestDB.hunts or {}) do
-        if not seen[id] and NormalizeHuntStatus(record.status) == "tracked" then
+        if not seen[id] and NormalizeHuntStatus(record.status) == "tracked" and not self:IsEntryObtained(id) then
             local entry = GQ.Data:GetEntryById(id)
             if entry and GQ.Data:EntryMatchesSlot(entry, slotName) and self:EntryMatchesTrackedHunt(entry) then
                 seen[id] = true
@@ -599,11 +669,27 @@ end
 
 function GQ.Log:GetCompletedSlotListEntries(slotName)
     local results = {}
+    local seen = {}
 
-    for id, record in pairs(GearQuestDB.hunts or {}) do
-        if NormalizeHuntStatus(record.status) == "completed" then
+    GearQuestDB.obtained = GearQuestDB.obtained or {}
+    for id, obtainedAt in pairs(GearQuestDB.obtained) do
+        if not IsDismissedCompleted(id) then
             local entry = GQ.Data:GetEntryById(id)
             if entry and GQ.Data:EntryMatchesSlot(entry, slotName) and self:EntryMatchesTrackedHunt(entry) then
+                seen[id] = true
+                table.insert(results, {
+                    entry = entry,
+                    completedAt = obtainedAt or 0,
+                })
+            end
+        end
+    end
+
+    for id, record in pairs(GearQuestDB.hunts or {}) do
+        if not seen[id] and not IsDismissedCompleted(id) and NormalizeHuntStatus(record.status) == "completed" then
+            local entry = GQ.Data:GetEntryById(id)
+            if entry and GQ.Data:EntryMatchesSlot(entry, slotName) and self:EntryMatchesTrackedHunt(entry) then
+                seen[id] = true
                 table.insert(results, {
                     entry = entry,
                     completedAt = record.completedAt or record.trackedAt or 0,
@@ -655,15 +741,115 @@ function GQ.Log:ActivateHunt(id)
     self:TrackHunt(id)
 end
 
-function GQ.Log:CompleteHunt(id)
+function GQ.Log:RecordCraftedItem(itemId)
+    if not itemId then
+        return false
+    end
+
+    GearQuestDB.crafted = GearQuestDB.crafted or {}
+    if GearQuestDB.crafted[itemId] then
+        return false
+    end
+
+    GearQuestDB.crafted[itemId] = time()
+    return true
+end
+
+function GQ.Log:HandleCraftChatMessage(msg)
+    local itemId = ExtractItemIdFromChatMessage(msg)
+    if not itemId then
+        return
+    end
+
+    if self:RecordCraftedItem(itemId) then
+        self:ScheduleAutoCompletionCheck()
+    end
+end
+
+function GQ.Log:IsEntryObtained(id)
+    if not id then
+        return false
+    end
+    if GetObtainedTimestamp(id) then
+        return true
+    end
     local record = GetHuntRecord(id)
-    if record then
-        record.status = "completed"
-        record.completedAt = time()
-        self:Refresh()
-        if GQ.Tracker then
-            GQ.Tracker:Refresh()
+    return record and NormalizeHuntStatus(record.status) == "completed"
+end
+
+function GQ.Log:IsItemIdObtained(itemId)
+    if not itemId then
+        return false
+    end
+
+    for _, entry in ipairs(GQ.Data:GetEntriesByItemId(itemId)) do
+        if GQ.Data:EntryMatchesPlayer(entry) and self:IsEntryObtained(entry.id) then
+            return true
         end
+    end
+
+    return false
+end
+
+function GQ.Log:ShouldAutoCompleteOnObtain(entry)
+    if not entry or self:IsEntryObtained(entry.id) then
+        return false
+    end
+
+    if GetHuntStatus(entry.id) == "tracked" then
+        return true
+    end
+
+    local slotName = GQ.Data:NormalizeSlotName(entry.slot)
+    for _, upgrade in ipairs(GQ.Data:GetTopUpgradesForSlot(slotName, 3)) do
+        if upgrade.id == entry.id then
+            return true
+        end
+    end
+
+    return false
+end
+
+function GQ.Log:MarkEntryObtained(entry, options)
+    if not entry or not entry.id or self:IsEntryObtained(entry.id) then
+        return false
+    end
+
+    local now = time()
+    GearQuestDB.obtained = GearQuestDB.obtained or {}
+    GearQuestDB.obtained[entry.id] = now
+
+    local record = GetHuntRecord(entry.id) or {}
+    record.status = "completed"
+    record.completedAt = now
+    record.obtained = true
+    GearQuestDB.hunts[entry.id] = record
+
+    local showToast = not options or options.showToast ~= false
+    if showToast and GQ.Toast then
+        GQ.Toast:ShowForEntry(entry)
+    end
+
+    return true
+end
+
+function GQ.Log:CompleteHunt(id)
+    local entry = GQ.Data:GetEntryById(id)
+    if entry then
+        self:MarkEntryObtained(entry, { showToast = false })
+    else
+        local record = GetHuntRecord(id)
+        if record then
+            record.status = "completed"
+            record.completedAt = time()
+            GearQuestDB.obtained = GearQuestDB.obtained or {}
+            GearQuestDB.obtained[id] = record.completedAt
+        end
+    end
+
+    self:Refresh()
+    if GQ.Tracker then
+        GQ.Tracker:Refresh()
     end
 end
 
@@ -734,6 +920,11 @@ function GQ.Log:UntrackHunt(id)
     local willDisappear = self:WillHuntDisappearFromActiveList(id)
     local onCompletedTab = self:GetListTab() == "completed"
 
+    if self:IsEntryObtained(id) and onCompletedTab then
+        GearQuestDB.dismissedCompleted = GearQuestDB.dismissedCompleted or {}
+        GearQuestDB.dismissedCompleted[id] = true
+    end
+
     GearQuestDB.hunts[id] = nil
 
     if self.selectedHuntId == id and (willDisappear or onCompletedTab) then
@@ -754,25 +945,35 @@ end
 function GQ.Log:CheckAutoCompletion()
     local changed = false
 
-    for id, record in pairs(GearQuestDB.hunts or {}) do
-        if NormalizeHuntStatus(record.status) == "tracked" then
-            local entry = GQ.Data:GetEntryById(id)
-            if entry and PlayerOwnsItem(entry.itemId) then
-                record.status = "completed"
-                record.completedAt = time()
+    for _, entry in ipairs(GQ.Data.entries) do
+        if GQ.Data:EntryMatchesPlayer(entry)
+            and self:ShouldAutoCompleteOnObtain(entry)
+            and PlayerHasObtainedEntryItem(entry)
+        then
+            if self:MarkEntryObtained(entry) then
                 changed = true
                 local itemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
-                print("|cff66ccffGearQuest|r: Completed — " .. itemName .. " obtained.")
+                if entry.sourceType == "profession" then
+                    print("|cff66ccffGearQuest|r: Completed — " .. itemName .. " crafted.")
+                else
+                    print("|cff66ccffGearQuest|r: Completed — " .. itemName .. " obtained.")
+                end
             end
         end
     end
 
-    if changed and self.frame and self.frame:IsShown() then
-        self:Refresh()
-    end
+    if changed then
+        if self.frame and self.frame:IsShown() then
+            self:Refresh()
+        end
 
-    if changed and GQ.Tracker then
-        GQ.Tracker:Refresh()
+        if GQ.Tracker then
+            GQ.Tracker:Refresh()
+        end
+
+        if GQ and GQ.RefreshUI then
+            GQ:RefreshUI()
+        end
     end
 end
 
@@ -934,11 +1135,22 @@ function GQ.Log:EnsureTrackerEvents()
     local tracker = CreateFrame("Frame")
     tracker:RegisterEvent("BAG_UPDATE")
     tracker:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
-    tracker:SetScript("OnEvent", function()
+    tracker:RegisterEvent("MERCHANT_CLOSED")
+    tracker:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    tracker:RegisterEvent("CHAT_MSG_SKILL")
+    tracker:RegisterEvent("CHAT_MSG_LOOT")
+    tracker:SetScript("OnEvent", function(_, event, msg)
         local log = _G.GearQuest and _G.GearQuest.Log
-        if log then
-            log:ScheduleAutoCompletionCheck()
+        if not log then
+            return
         end
+
+        if event == "CHAT_MSG_SKILL" or event == "CHAT_MSG_LOOT" then
+            log:HandleCraftChatMessage(msg)
+            return
+        end
+
+        log:ScheduleAutoCompletionCheck()
     end)
     self.trackerFrame = tracker
 end
@@ -1093,7 +1305,28 @@ function GQ.Log:BindExistingFrame(frame)
     self:EnsureTrackerEvents()
 end
 
+function GQ.Log:MigrateObtainedRecords()
+    GearQuestDB.obtained = GearQuestDB.obtained or {}
+    GearQuestDB.crafted = GearQuestDB.crafted or {}
+    GearQuestDB.dismissedCompleted = GearQuestDB.dismissedCompleted or {}
+
+    for id, record in pairs(GearQuestDB.hunts or {}) do
+        if NormalizeHuntStatus(record.status) == "completed" and not GearQuestDB.obtained[id] then
+            GearQuestDB.obtained[id] = record.completedAt or record.trackedAt or time()
+        end
+    end
+
+    for id, obtainedAt in pairs(GearQuestDB.obtained) do
+        local entry = GQ.Data:GetEntryById(id)
+        if entry and entry.sourceType == "profession" and entry.itemId and not GearQuestDB.crafted[entry.itemId] then
+            GearQuestDB.crafted[entry.itemId] = obtainedAt
+        end
+    end
+end
+
 function GQ.Log:Init()
+    self:MigrateObtainedRecords()
+
     if self.frame then
         return
     end
@@ -1438,6 +1671,12 @@ function GQ.Log:EnsureItemInfoListener()
 end
 
 function GQ.Log:SelectHunt(id, scrollToSelection)
+    local targetTab = self:IsEntryObtained(id) and "completed" or "active"
+    if self:GetListTab() ~= targetTab then
+        GearQuestDB.ui = GearQuestDB.ui or {}
+        GearQuestDB.ui.listTab = targetTab
+    end
+
     self.selectedHuntId = id
     self.scrollListToSelected = scrollToSelection == true
 

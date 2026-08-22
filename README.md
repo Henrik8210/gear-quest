@@ -44,6 +44,7 @@ Target: `C:\Program Files (x86)\World of Warcraft\_anniversary_\Interface\AddOns
 - Addon lives in `GearQuest/` (folder matches toc name for CurseForge packager)
 - TBC Anniversary interface: `## Interface: 20505`
 - Project brief for agents: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md)
+- Data curation & UI rules (including green ↑ indicators on vendors, loot, and **profession recipes**): [docs/DATA_RULES.md](docs/DATA_RULES.md)
 
 ## CurseForge release
 

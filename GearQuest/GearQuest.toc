@@ -13,6 +13,7 @@ Data.lua
 Compare.lua
 Indicator.lua
 Log.lua
+Toast.lua
 Tracker.lua
 Popup.lua
 PaperDoll.lua

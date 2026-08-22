@@ -14,6 +14,9 @@ GQ.ADDON_NAME = ADDON_NAME
 
 GearQuestDB = GearQuestDB or {
     hunts = {},
+    obtained = {},
+    crafted = {},
+    dismissedCompleted = {},
     settings = {},
 }
 
@@ -49,11 +52,15 @@ end
 function GQ:PLAYER_LOGIN()
     local ok, err = pcall(function()
         GearQuestDB.hunts = GearQuestDB.hunts or {}
+        GearQuestDB.obtained = GearQuestDB.obtained or {}
+        GearQuestDB.crafted = GearQuestDB.crafted or {}
+        GearQuestDB.dismissedCompleted = GearQuestDB.dismissedCompleted or {}
         GearQuestDB.settings = GearQuestDB.settings or {}
         self.Preview:MigrateSettings()
         self.Data:BuildIndex()
         self.Indicator:Init()
         self.Log:Init()
+        self.Toast:Init()
         self.Tracker:Init()
         self.Popup:Init()
         self.PaperDoll:Init()
@@ -69,6 +76,7 @@ function GQ:PLAYER_LOGIN()
     local previewNote = self.Preview:IsEnabled() and (" (" .. self:GetPreviewLabel() .. ")") or ""
     print("|cff66ccffGearQuest|r v" .. self.VERSION .. " loaded" .. previewNote .. ". Right-click a gear slot on your character panel, or |cff00ff00/gq|r.")
     print("|cff66ccffGearQuest|r: Configure test character with |cff00ff00/gq set|r (class, level, faction).")
+    self.Log:ScheduleAutoCompletionCheck()
 end
 
 function GQ:SyncLevelOverride()

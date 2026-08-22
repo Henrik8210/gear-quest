@@ -14,7 +14,20 @@ local LEVEL5_MIN = 5
 local LEVEL5_MAX = 10
 local LEVEL6_MIN = 6
 local LEVEL6_MAX = 12
+local LEVEL7_MIN = 7
+local LEVEL7_MAX = 12
 local MAIL_MELEE = ALLIANCE_MAIL
+
+-- Crafted output names for trainer matching when GetItemInfo is not cached yet.
+local PROFESSION_ITEM_NAMES = {
+    [10421] = "Rough Copper Vest",
+    [3469] = "Copper Chain Boots",
+    [2852] = "Copper Chain Pants",
+    [3471] = "Copper Chain Vest",
+    [2851] = "Copper Chain Belt",
+    [2580] = "Reinforced Linen Cape",
+    [3472] = "Runed Copper Gauntlets",
+}
 
 local MIDSUMMER_CROWN =
     "During the Midsummer Fire Festival, complete A Thief's Reward in a capital city after stealing the opposing faction's bonfire flames (or turn in if you finished in a previous year). Usable from level 1."
@@ -486,14 +499,14 @@ GQ.Data.entries = {
         factions = ALLIANCE,
         curatedRank = 2,
         sourceType = "quest_reward",
-        instructions = "Complete Wanted: Hogger in Elwynn Forest and choose the Footman Tunic over the other quest rewards. Note: leather chest with +Agi/+Sta — only if you skipped mail options.",
+        instructions = "Complete Wanted: Hogger in Elwynn Forest and choose the Footman Tunic over the other quest rewards. Leather chest with +Agility and +Stamina.",
         zone = "Elwynn Forest",
         npc = "Marshal Dughan",
         questName = "Wanted: \"Hogger\"",
     },
     {
-        id = "early5_chest_light_chain_armor",
-        itemId = 2398,
+        id = "early5_chest_light_mail_armor",
+        itemId = 2392,
         slot = "Chest",
         minLevel = LEVEL5_MIN,
         maxLevel = LEVEL5_MAX,
@@ -501,7 +514,7 @@ GQ.Data.entries = {
         factions = ALLIANCE,
         curatedRank = 3,
         sourceType = "vendor",
-        instructions = "Buy Light Chain Armor (req 5) from Andrew Krighton in Goldshire or another mail vendor in a starter city.",
+        instructions = "Buy Light Mail Armor (req 5) from Andrew Krighton in Goldshire or another mail vendor in a starter city.",
         zone = "Elwynn Forest",
         npc = "Andrew Krighton",
     },
@@ -691,8 +704,8 @@ GQ.Data.entries = {
         zone = "Elwynn Forest",
     },
     {
-        id = "early5_legs_light_chain_leggings",
-        itemId = 2400,
+        id = "early5_legs_light_mail_leggings",
+        itemId = 2394,
         slot = "Legs",
         minLevel = LEVEL5_MIN,
         maxLevel = LEVEL5_MAX,
@@ -700,8 +713,9 @@ GQ.Data.entries = {
         factions = ALLIANCE,
         curatedRank = 3,
         sourceType = "vendor",
-        instructions = "Buy Light Chain Leggings (req 5) from a mail armor vendor in your starter city.",
+        instructions = "Buy Light Mail Leggings (req 5) from Andrew Krighton in Goldshire or another mail vendor in a starter city.",
         zone = "Elwynn Forest",
+        npc = "Andrew Krighton",
     },
 
     -- Waist — mail melee, both factions (level 5)
@@ -857,7 +871,7 @@ GQ.Data.entries = {
         factions = ALLIANCE,
         curatedRank = 3,
         sourceType = "quest_reward",
-        instructions = "Complete Protecting the Herd in Dun Morogh and choose Soft Leather Tunic only if you skipped the mail options. Leather chest with +2 Stamina.",
+        instructions = "Complete Protecting the Herd in Dun Morogh and choose Soft Leather Tunic over the other rewards. Leather chest with +2 Stamina.",
         zone = "Dun Morogh",
         npc = "Rudra Amberstill",
         questName = "Protecting the Herd",
@@ -1138,6 +1152,370 @@ GQ.Data.entries = {
         zone = "Elwynn Forest",
     },
 
+    -- Level 7 band — Head unchanged (early4_all_head_*). No Shoulder entries.
+
+    -- Back — Alliance, all classes (level 7)
+    {
+        id = "early7_back_reinforced_linen_cape",
+        itemId = 2580,
+        slot = "Back",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        factions = ALLIANCE,
+        curatedRank = 1,
+        sourceType = "profession",
+        profession = "Tailoring",
+        instructions = "Learn Reinforced Linen Cape from a Tailoring trainer and craft at a loom (Tailoring 60). +1 Intellect.",
+        zone = "Stormwind City",
+    },
+    {
+        id = "early7_back_veteran_cloak",
+        itemId = 4677,
+        slot = "Back",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        factions = ALLIANCE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Veteran Cloak (req 7, 11 armor) is a common world drop from humanoids in low-level Alliance zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_back_ceremonial_cloak",
+        itemId = 4692,
+        slot = "Back",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        factions = ALLIANCE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Ceremonial Cloak (req 7, 11 armor) is a common world drop from humanoids in starter zones.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Chest — Alliance mail melee (level 7)
+    {
+        id = "early7_chest_warriors_tunic",
+        itemId = 2965,
+        slot = "Chest",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        curatedRank = 1,
+        sourceType = "world_drop",
+        instructions = "Warrior's Tunic (req 6) is a green mail world drop in starter zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_chest_explorers_vest",
+        itemId = 7229,
+        slot = "Chest",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        curatedRank = 2,
+        sourceType = "quest_reward",
+        instructions = "Complete the Bashal'Aran quest chain in Darkshore (final turn-in to Asterion) and choose Explorer's Vest (+2 Stamina, +1 Intellect) over the other rewards.",
+        zone = "Darkshore",
+        npc = "Asterion",
+        questName = "Bashal'Aran",
+    },
+    {
+        id = "early7_chest_ravager_chitin_tunic",
+        itemId = 24107,
+        slot = "Chest",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        curatedRank = 3,
+        sourceType = "quest_reward",
+        instructions = "Complete Beasts of the Apocalypse! on Azuremyst Isle (Draenei starter zone) and choose Ravager Chitin Tunic (+1 Strength) over the other rewards.",
+        zone = "Azuremyst Isle",
+        questName = "Beasts of the Apocalypse!",
+    },
+
+    -- Wrist — mail melee, both factions (level 7)
+    {
+        id = "early7_wrist_ironwrought_bracers",
+        itemId = 6177,
+        slot = "Wrist",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete Tundra MacGrann's Stolen Stash in Dun Morogh (req 7) and choose Ironwrought Bracers over Wooly Mittens.",
+        zone = "Dun Morogh",
+        npc = "Tundra MacGrann",
+        questName = "Tundra MacGrann's Stolen Stash",
+    },
+    {
+        id = "early7_wrist_cadet_bracers",
+        itemId = 9760,
+        slot = "Wrist",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Cadet Bracers (req 7) are a common mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_wrist_brackwater_bracers",
+        itemId = 3303,
+        slot = "Wrist",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Brackwater Bracers (req 7) are a common mail world drop from humanoids in starter zones.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Main Hand — mail melee, both factions (level 7)
+    {
+        id = "early7_mainhand_icepane_warhammer",
+        itemId = 2254,
+        slot = "MainHand",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 1,
+        sourceType = "boss_drop",
+        instructions = "Farm Icepane Warhammer (+2 Strength) from Hammerspine in the Gol'Bolar Quarry mine in Dun Morogh. Train Two-Handed Maces first.",
+        zone = "Dun Morogh",
+        npc = "Hammerspine",
+    },
+    {
+        id = "early7_mainhand_short_bastard_sword",
+        itemId = 3192,
+        slot = "MainHand",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Short Bastard Sword (req 7) is a green two-handed sword world drop. Train Two-Handed Swords from a weapon master first.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_mainhand_coldridge_hammer",
+        itemId = 3103,
+        slot = "MainHand",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 3,
+        sourceType = "quest_reward",
+        instructions = "Complete Protecting the Herd in Dun Morogh and choose Coldridge Hammer over the other rewards. Train Two-Handed Maces first.",
+        zone = "Dun Morogh",
+        npc = "Rudra Amberstill",
+        questName = "Protecting the Herd",
+    },
+
+    -- Off Hand — mail melee, both factions (level 7)
+    {
+        id = "early7_offhand_gypsy_buckler",
+        itemId = 9753,
+        slot = "SecondaryHand",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 1,
+        sourceType = "world_drop",
+        instructions = "Gypsy Buckler (req 7) is a green shield world drop with random stat bonuses.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_offhand_war_torn_shield",
+        itemId = 15486,
+        slot = "SecondaryHand",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "War-torn Shield (req 7) is a green shield world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_offhand_infantry_shield",
+        itemId = 7108,
+        slot = "SecondaryHand",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Infantry Shield (req 6) is a green mail shield world drop with random stat bonuses.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Feet — mail melee, both factions (level 7)
+    {
+        id = "early7_feet_battle_chain_boots",
+        itemId = 3279,
+        slot = "Feet",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 1,
+        sourceType = "world_drop",
+        instructions = "Battle Chain Boots (req 7) are a common mail world drop from humanoids in starter zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_feet_infantry_boots",
+        itemId = 6506,
+        slot = "Feet",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 2,
+        sourceType = "vendor",
+        instructions = "Buy Infantry Boots (req 6) from a mail armor vendor in your starter city.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_feet_light_chain_boots",
+        itemId = 2401,
+        slot = "Feet",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 3,
+        sourceType = "vendor",
+        instructions = "Buy Light Chain Boots (req 5) from a mail armor vendor in your starter city.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Legs — Alliance mail melee (level 7)
+    {
+        id = "early7_legs_stormwind_guard_leggings",
+        itemId = 6084,
+        slot = "Legs",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        curatedRank = 1,
+        sourceType = "quest_reward",
+        instructions = "Complete Wanted: Hogger in Elwynn Forest and choose Stormwind Guard Leggings (+3 Strength) over the other quest rewards.",
+        zone = "Elwynn Forest",
+        npc = "Marshal Dughan",
+        questName = "Wanted: \"Hogger\"",
+    },
+    {
+        id = "early7_legs_infantry_leggings",
+        itemId = 6337,
+        slot = "Legs",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "Infantry Leggings (req 7) are a green mail world drop in starter zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_legs_battle_chain_pants",
+        itemId = 3282,
+        slot = "Legs",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        factions = ALLIANCE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Battle Chain Pants (req 7) are a common mail world drop from humanoids in starter zones.",
+        zone = "Elwynn Forest",
+    },
+
+    -- Waist — mail melee, both factions (level 7)
+    {
+        id = "early7_waist_cadet_belt",
+        itemId = 9758,
+        slot = "Waist",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 1,
+        sourceType = "world_drop",
+        instructions = "Cadet Belt (req 7) is a common mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_waist_worn_mail_belt",
+        itemId = 1730,
+        slot = "Waist",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 2,
+        sourceType = "vendor",
+        instructions = "Buy Worn Mail Belt (req 7) from a mail armor vendor in your starter city.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_waist_copper_chain_belt",
+        itemId = 2851,
+        slot = "Waist",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 3,
+        sourceType = "profession",
+        profession = "Blacksmithing",
+        instructions = "Learn Copper Chain Belt and craft at an anvil (requires level 6), or buy from a vendor if available.",
+        zone = "Elwynn Forest",
+        npc = "Smith Argus",
+    },
+
+    -- Hands — mail melee, both factions (level 7)
+    {
+        id = "early7_hands_runed_copper_gauntlets",
+        itemId = 3472,
+        slot = "Hands",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 1,
+        sourceType = "profession",
+        profession = "Blacksmithing",
+        instructions = "Learn Runed Copper Gauntlets from a Blacksmithing trainer and craft at an anvil (Blacksmithing 40). Random +Agility or +Intellect.",
+        zone = "Stormwind City",
+    },
+    {
+        id = "early7_hands_war_torn_handgrips",
+        itemId = 15484,
+        slot = "Hands",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 2,
+        sourceType = "world_drop",
+        instructions = "War-torn Handgrips (req 7) are a green mail world drop from humanoids in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+    {
+        id = "early7_hands_battle_chain_gloves",
+        itemId = 3281,
+        slot = "Hands",
+        minLevel = LEVEL7_MIN,
+        maxLevel = LEVEL7_MAX,
+        classes = MAIL_MELEE,
+        curatedRank = 3,
+        sourceType = "world_drop",
+        instructions = "Battle Chain Gloves (req 6) are a green mail world drop in low-level zones.",
+        zone = "Elwynn Forest",
+    },
+
     -- Later Alliance leveling (unchanged horizon)
     {
         id = "early_chest_tunic_westfall",
@@ -1256,10 +1634,33 @@ end
 
 function GQ.Data:BuildIndex()
     self.bySlot = {}
+    self.byItemId = {}
     for _, entry in ipairs(self.entries) do
         self.bySlot[entry.slot] = self.bySlot[entry.slot] or {}
         table.insert(self.bySlot[entry.slot], entry)
+        self.byItemId[entry.itemId] = self.byItemId[entry.itemId] or {}
+        table.insert(self.byItemId[entry.itemId], entry)
     end
+end
+
+function GQ.Data:GetEntriesByItemId(itemId)
+    if not itemId then
+        return {}
+    end
+    return self.byItemId and self.byItemId[itemId] or {}
+end
+
+function GQ.Data:GetItemDisplayName(itemId)
+    if not itemId then
+        return nil
+    end
+
+    local name = GetItemInfo(itemId)
+    if name then
+        return name
+    end
+
+    return PROFESSION_ITEM_NAMES[itemId]
 end
 
 function GQ.Data:GetEntryById(id)

@@ -55,6 +55,20 @@ local function GetSlotIconSize(slotButton)
     return size
 end
 
+local function EnsureCheckmark(icon)
+    if icon.checkmark then
+        return icon.checkmark
+    end
+
+    local mark = icon:CreateTexture(nil, "OVERLAY", nil, 7)
+    mark:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+    mark:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
+    mark:SetSize(16, 16)
+    mark:Hide()
+    icon.checkmark = mark
+    return mark
+end
+
 local function CreateUpgradeIcon(parent, index)
     local btn = CreateFrame("Button", "GearQuestUpgradeIcon" .. index, parent)
     btn:Hide()
@@ -90,6 +104,8 @@ local function CreateUpgradeIcon(parent, index)
 
     btn:SetScript("OnClick", OnUpgradeIconClick)
 
+    EnsureCheckmark(btn)
+
     return btn
 end
 
@@ -101,6 +117,7 @@ function GQ.Popup:WireIconScripts()
     for i = 1, MAX_OPTIONS do
         local icon = self.container.icons[i]
         if icon then
+            EnsureCheckmark(icon)
             if icon.RegisterForClicks then
                 icon:RegisterForClicks("LeftButtonUp")
             end
@@ -261,6 +278,22 @@ function GQ.Popup:PositionBar(slotButton, count)
     end
 end
 
+function GQ.Popup:UpdateObtainCheckmark(icon, entry)
+    if not icon then
+        return
+    end
+
+    local mark = EnsureCheckmark(icon)
+    local obtained = entry and GQ.Log and GQ.Log:IsEntryObtained(entry.id)
+    if obtained then
+        local iconSize = icon:GetWidth() or DEFAULT_ICON_SIZE
+        mark:SetSize(math.max(14, math.floor(iconSize * 0.42)), math.max(14, math.floor(iconSize * 0.42)))
+        mark:Show()
+    else
+        mark:Hide()
+    end
+end
+
 function GQ.Popup:ApplyIconData(icon, entry)
     icon.entry = entry
     local _, _, quality, _, _, _, _, _, _, texture = GetItemInfo(entry.itemId)
@@ -272,6 +305,7 @@ function GQ.Popup:ApplyIconData(icon, entry)
 
     local r, g, b = GetItemQualityColor(quality or 1)
     icon.border:SetVertexColor(r, g, b)
+    self:UpdateObtainCheckmark(icon, entry)
 end
 
 function GQ.Popup:RefreshIcons()
@@ -301,6 +335,9 @@ function GQ.Popup:Hide()
     for i = 1, MAX_OPTIONS do
         self.container.icons[i]:Hide()
         self.container.icons[i].entry = nil
+        if self.container.icons[i].checkmark then
+            self.container.icons[i].checkmark:Hide()
+        end
     end
     self.activeSlotName = nil
     self.activeSlotButton = nil

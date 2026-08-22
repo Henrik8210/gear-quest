@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.0 (unreleased)
+
+- BiS upgrade indicators (green ↑) on loot, vendor, quest rewards, trainer detail icon, and tradeskill detail icon
+- Auto-complete hunts on obtain; persistent obtained state; celebration toast
+- Profession hunts complete on craft only (not recipe learn)
+- Document trainer/tradeskill indicator behavior and WoW UI quirks in DATA_RULES.md
+
 ## v0.1.0
 
 - MVP: Hunter Main Hand weapon upgrades (levels 30–45)

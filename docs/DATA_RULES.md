@@ -63,7 +63,7 @@ When curating a level band, **search all obtainable categories** before moving o
 
 You do not need all five in every slot, but do not stop after vendors alone if another category has a valid item.
 
-For **profession** entries, also set optional `profession = "Blacksmithing"` (or Tailoring, Leatherworking, …) and mention the trainer, recipe, and where to craft in `instructions`.
+For **profession** entries, also set optional `profession = "Blacksmithing"` (or Tailoring, Leatherworking, …) and mention the trainer, recipe, and where to craft in `instructions`. The hunt completes only when the player **crafts** the output item (`itemId`), not when they learn the recipe alone.
 
 ### Armor type (class best tier)
 
@@ -343,5 +343,74 @@ Use `id` prefix `early6_<slot>_<snake_name>`. Order legs (and similar) by **real
 | `GearQuest/Tracker.lua` | Floating tracked-hunt panel |
 | `GearQuest/Popup.lua` | Character-slot upgrade bar |
 | `GearQuest/PaperDoll.lua` | Right-click slot hooks (`SUPPORTED_SLOTS`) |
-| `GearQuest/Indicator.lua` | Green ↑ on BiS items in loot/quest UI |
+| `GearQuest/Indicator.lua` | Green ↑ on BiS items in loot/quest/profession UI |
+| `GearQuest/Toast.lua` | “BiS upgrade obtained!” celebration toast |
 | `GearQuest/Data.lua` | `GetActiveBandMinLevel`, `IsEntryNewForPlayer` |
+
+### Upgrade indicators (`Indicator.lua`)
+
+GearQuest shows a **green ↑** on item icons when that item is one of your current **top-3 upgrades** for its slot (ranked by `Compare.lua` for your preview class/level/faction). The arrow uses the crafted **output item** for profession recipes, not the recipe spell itself.
+
+| UI | When the arrow appears |
+|----|------------------------|
+| **Loot window** | Lootable BiS upgrade drops |
+| **Need/Greed roll frames** | Group loot rolls on BiS upgrades |
+| **Quest log reward choices** | Quest rewards that match a top-3 hunt |
+| **Vendor window** | Items the merchant sells that are BiS upgrades |
+| **Trainer window** | **Detail inset icon only** — large icon at bottom when a recipe is selected (e.g. Copper Chain Pants at Smith Argus) |
+| **Trade Skill window** | **Detail inset icon only** — large icon at bottom when a recipe is selected (e.g. Rough Copper Vest in Blacksmithing) |
+| **Craft window** | Detail icon when the recipe produces an equippable BiS item (First Aid, etc.) |
+
+**Icons only, never list text:** In trainer and tradeskill windows, recipe **list rows are text buttons** (no item icon). The arrow must **not** appear next to recipe names in the scroll list — only on the **bottom detail/inset icon** (`ClassTrainerSkillIcon`, `TradeSkillSkillIcon`). List-row overlays are explicitly cleared on every refresh.
+
+#### Trainer window (Class Trainer / profession trainers)
+
+| Topic | Detail |
+|-------|--------|
+| **Detail icon frame** | `ClassTrainerSkillIcon` (classic / TBC Anniversary layout). Do not rely on `TradeSkillDetailIcon` naming — that frame is tradeskill-only. |
+| **Load order** | `Blizzard_TrainerUI` is **LoadOnDemand**. Hooks on `ClassTrainerFrame_Update`, `ClassTrainer_SetSelection`, etc. are registered in `EnsureTrainerHooks()` when the trainer opens (`TRAINER_SHOW`, `ADDON_LOADED`) — not at addon load, or they never attach after `/reload`. |
+| **Open vs click** | After `/reload`, opening Smith Argus runs Blizzard’s initial `ClassTrainer_SetSelection` **before** GearQuest hooks exist. The arrow only appeared after clicking a list row until we added `OnTrainerOpen()`: frame `OnShow` hooks, list-button `OnClick` hooks, staggered `C_Timer.After` refreshes (0–1 s), and a short detail-icon watcher (~3 s) that polls `ClassTrainerSkillIcon`. |
+| **Link before learning profession** | `GetTrainerServiceItemLink(index)` is often **nil** until the player learns the profession or the client caches the item. Fallback order: tooltip `GameTooltip:SetTrainerService(index)` + `Show()` → match `GetTrainerServiceName(index)` to upgrade `itemId` → `GetTrainerServiceItemLink`. |
+| **Name matching** | Service name from the list (e.g. `"Copper Chain Pants"`) is matched to top-3 upgrade items. Use `Data:GetItemDisplayName(itemId)` which falls back to `PROFESSION_ITEM_NAMES` in `Data.lua` when `GetItemInfo` is not cached yet. |
+| **Classic API quirk** | `GetTrainerServiceInfo(index)` returns `(name, subText, serviceType, isExpanded)` — read **service type from the 3rd return**, not the 2nd (2nd is sub-text, not `"available"` / `"header"`). |
+
+#### Trade Skill window (your profession UI)
+
+| Topic | Detail |
+|-------|--------|
+| **Detail icon frame** | `TradeSkillSkillIcon` on classic clients (not `TradeSkillDetailIcon`). |
+| **Hooks** | `TradeSkillFrame_Update`, `TradeSkillFrame_SetSelection` — register on `TRADE_SKILL_SHOW` / `ADDON_LOADED` if needed. |
+| **Output link** | `GetTradeSkillItemLink(index)` when available; else tooltip `SetTradeSkillItem`. |
+
+#### After obtain / profession completion
+
+| Behavior | Rule |
+|----------|------|
+| **Arrow removal** | Once an item is obtained (`GearQuestDB.obtained`), its `itemId` is excluded from the indicator cache — arrows disappear on vendors, loot, recipes, and trainer UIs. Checkmarks on the character upgrade bar remain. |
+| **Celebration toast** | `Toast.lua` shows “BiS upgrade obtained!” when a top-3 item is obtained or a tracked hunt completes. Click opens log on **Completed** tab. |
+| **Profession hunts** | `sourceType = "profession"` completes only when the player **crafts** the item (`CHAT_MSG_SKILL`: “You create …”). Learning the recipe, buying, or looting the same item does **not** complete the hunt. `GearQuestDB.crafted[itemId]` tracks craft completion; `obtained` persists if the item is sold. |
+
+#### Data requirements for profession indicators
+
+- `sourceType = "profession"`, valid crafted `itemId`, entry ranks in top 3 for the slot at the target level band.
+- Add crafted output names to `PROFESSION_ITEM_NAMES` in `Data.lua` when trainer name-matching must work before `GetItemInfo` caches the item (new profession recipes).
+- Optional `profession = "Blacksmithing"` (etc.) for labels; not used for arrow placement.
+
+#### Maintainer checklist (trainer / tradeskill regressions)
+
+- [ ] After `/reload`, open trainer **without** clicking the list — arrow on detail icon within ~1 s
+- [ ] Arrow on **inset icon**, not on recipe name in scroll list
+- [ ] Works **before** learning the profession (name / tooltip fallback)
+- [ ] Blacksmithing window: arrow on `TradeSkillSkillIcon` when recipe selected
+- [ ] Arrow gone after item obtained / hunt completed
+- [ ] Profession hunt completes on **craft**, not on learning recipe at trainer
+
+#### Related indicator code
+
+| File / symbol | Role |
+|---------------|------|
+| `GearQuest/Indicator.lua` | `EnsureTrainerHooks`, `OnTrainerOpen`, `UpdateTrainerDetailIcon`, `UpdateTradeSkillDetailIcon`, `IsProfessionListRow`, `PROFESSION_ITEM_NAMES` via `Data:GetItemDisplayName` |
+| `GearQuest/Data.lua` | `PROFESSION_ITEM_NAMES`, `GetItemDisplayName` |
+| `GearQuest/Toast.lua` | Obtain celebration toast |
+| `GearQuest/Log.lua` | Obtain detection, craft-only profession completion, Completed tab |
+| `GearQuest/Popup.lua` | Green checkmarks on obtained upgrade bar icons |

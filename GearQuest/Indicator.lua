@@ -3,8 +3,18 @@ local _, GQ = ...
 GQ.Indicator = GQ.Indicator or {}
 
 local ARROW_TEXTURE = "Interface\\BUTTONS\\Arrow-Up-Up"
-local ARROW_SIZE = 14
-local ARROW_COLOR = { 0.15, 1, 0.15 }
+local ARROW_WIDTH = 16
+local ARROW_HEIGHT = 21
+local ARROW_OVERLAP = -2
+local ARROW_COLOR = { 0.12, 1, 0.12 }
+local ARROW_GLOW_COLOR = { 0.45, 1, 0.45 }
+local ARROW_GLOW_SCALE = 1.24
+local ARROW_LAYOUT_VERSION = 4
+local PULSE_SPEED = 3.2
+local PULSE_ALPHA_MIN = 0.82
+local PULSE_ALPHA_MAX = 1.0
+local PULSE_GLOW_MIN = 0.12
+local PULSE_GLOW_MAX = 0.38
 
 local function GetItemIdFromLink(link)
     if not link then
@@ -13,34 +23,894 @@ local function GetItemIdFromLink(link)
     return tonumber(link:match("item:(%d+)"))
 end
 
+local function ResolveLinkFromTooltip(setter)
+    if not setter or not GameTooltip or not GameTooltip.GetItem then
+        return nil
+    end
+
+    GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+    setter()
+    if GameTooltip.Show then
+        GameTooltip:Show()
+    end
+    local _, link = GameTooltip:GetItem()
+    GameTooltip:Hide()
+    return link
+end
+
+local TRAINER_SERVICE_TYPES = {
+    header = true,
+    available = true,
+    unavailable = true,
+    used = true,
+}
+
+local function GetTrainerServiceType(index)
+    if not GetTrainerServiceInfo or not index or index <= 0 then
+        return nil
+    end
+
+    local name, second, third = GetTrainerServiceInfo(index)
+    if not name then
+        return nil
+    end
+
+    if TRAINER_SERVICE_TYPES[second] then
+        return second
+    end
+
+    if TRAINER_SERVICE_TYPES[third] then
+        return third
+    end
+
+    return second
+end
+
+function GQ.Indicator:ResolveTradeSkillOutputLink(index)
+    if not index or index <= 0 then
+        return nil
+    end
+
+    if GetTradeSkillItemLink then
+        local link = GetTradeSkillItemLink(index)
+        if link then
+            return link
+        end
+    end
+
+    if GameTooltip and GameTooltip.SetTradeSkillItem then
+        return ResolveLinkFromTooltip(function()
+            GameTooltip:SetTradeSkillItem(index)
+        end)
+    end
+
+    return nil
+end
+
+function GQ.Indicator:ResolveCraftOutputLink(index)
+    if not index or index <= 0 then
+        return nil
+    end
+
+    if GetCraftItemLink then
+        local link = GetCraftItemLink(index)
+        if link then
+            return link
+        end
+    end
+
+    if GameTooltip and GameTooltip.SetCraftItem then
+        return ResolveLinkFromTooltip(function()
+            GameTooltip:SetCraftItem(index)
+        end)
+    end
+
+    return nil
+end
+
+local function IsExpandCollapseTexture(texture)
+    if not texture or not texture.GetTexture then
+        return false
+    end
+
+    local path = texture:GetTexture()
+    if not path then
+        return false
+    end
+
+    path = tostring(path)
+    return path:find("PlusButton", 1, true) ~= nil
+        or path:find("MinusButton", 1, true) ~= nil
+        or path:find("UI-PlusMinus", 1, true) ~= nil
+end
+
+local function IsTrainerListRow(button)
+    if not button or not button.GetName then
+        return false
+    end
+
+    local name = button:GetName() or ""
+    if name:find("ClassTrainerSkill", 1, true) and name ~= "ClassTrainerSkillIcon" then
+        return true
+    end
+
+    if ClassTrainerFrame and ClassTrainerFrame.ScrollBox and button.GetParent then
+        local parent = button:GetParent()
+        if parent == ClassTrainerFrame.ScrollBox or (parent and parent.GetParent and parent:GetParent() == ClassTrainerFrame.ScrollBox) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsTradeSkillListRow(button)
+    if not button or not button.GetName then
+        return false
+    end
+
+    local name = button:GetName() or ""
+    if name:match("^TradeSkillSkill%d+$") then
+        return true
+    end
+
+    if TradeSkillFrame and TradeSkillFrame.RecipeList and button.GetParent then
+        local parent = button:GetParent()
+        if parent == TradeSkillFrame.RecipeList or (parent and parent.GetParent and parent:GetParent() == TradeSkillFrame.RecipeList) then
+            return true
+        end
+    end
+
+    if TradeSkillFrame and TradeSkillFrame.ScrollBox and button.GetParent then
+        local parent = button:GetParent()
+        if parent == TradeSkillFrame.ScrollBox or (parent and parent.GetParent and parent:GetParent() == TradeSkillFrame.ScrollBox) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsCraftListRow(button)
+    if not button or not button.GetName then
+        return false
+    end
+
+    local name = button:GetName() or ""
+    return name:match("^Craft%d+$") ~= nil
+end
+
+local function IsProfessionListRow(button)
+    return IsTrainerListRow(button) or IsTradeSkillListRow(button) or IsCraftListRow(button)
+end
+
+local function GetTrainerServiceName(index)
+    if not GetTrainerServiceInfo or not index or index <= 0 then
+        return nil
+    end
+
+    return select(1, GetTrainerServiceInfo(index))
+end
+
+local function IsTrainerDetailIconHost(button)
+    if not button then
+        return false
+    end
+
+    local name = button.GetName and button:GetName() or ""
+    if name == "ClassTrainerSkillIcon" then
+        return true
+    end
+
+    if ClassTrainerFrame and (button == ClassTrainerFrame.Icon or button == ClassTrainerFrame.skillIcon) then
+        return true
+    end
+
+    local inset = ClassTrainerFrame and (ClassTrainerFrame.bottomInset or ClassTrainerFrame.BottomInset)
+    if inset and button.GetParent then
+        local parent = button:GetParent()
+        if parent == inset and not IsTrainerListRow(button) then
+            local width = button:GetWidth() or 0
+            local height = button:GetHeight() or 0
+            return width >= 28 and height >= 28 and width <= 80 and height <= 80
+        end
+    end
+
+    return false
+end
+
+local function IsTradeSkillDetailIconHost(button)
+    if not button then
+        return false
+    end
+
+    local name = button.GetName and button:GetName() or ""
+    if name == "TradeSkillSkillIcon" or name == "TradeSkillDetailIcon" or name == "TradeSkillDetailItemIcon" then
+        return true
+    end
+
+    if TradeSkillFrame and (button == TradeSkillFrame.DetailIcon or button == TradeSkillFrame.SkillIcon) then
+        return true
+    end
+
+    local detailFrame = TradeSkillFrame and (TradeSkillFrame.Details or TradeSkillFrame.detailsFrame or TradeSkillFrame.DetailsFrame)
+    if detailFrame and button.GetParent then
+        local parent = button:GetParent()
+        if parent == detailFrame and not IsTradeSkillListRow(button) then
+            local width = button:GetWidth() or 0
+            local height = button:GetHeight() or 0
+            return width >= 28 and height >= 28 and width <= 80 and height <= 80
+        end
+    end
+
+    return false
+end
+
+local function IsCraftDetailIconHost(button)
+    if not button then
+        return false
+    end
+
+    local name = button.GetName and button:GetName() or ""
+    if name == "CraftIcon" then
+        return true
+    end
+
+    return CraftFrame and button == CraftFrame.DetailIcon
+end
+
+local function IsDetailIconHost(button)
+    return IsTrainerDetailIconHost(button) or IsTradeSkillDetailIconHost(button) or IsCraftDetailIconHost(button)
+end
+
+local function IsUsableIconTexture(texture, hostButton)
+    if not texture or not texture.GetObjectType or texture:GetObjectType() ~= "Texture" then
+        return false
+    end
+
+    if IsExpandCollapseTexture(texture) then
+        return false
+    end
+
+    local width = texture:GetWidth() or 0
+    local height = texture:GetHeight() or 0
+    if width >= 14 and height >= 14 then
+        return true
+    end
+
+    local sizeHost = hostButton or (texture.GetParent and texture:GetParent())
+    if sizeHost and IsDetailIconHost(sizeHost) and sizeHost.GetWidth and sizeHost.GetHeight then
+        local hostWidth = sizeHost:GetWidth() or 0
+        local hostHeight = sizeHost:GetHeight() or 0
+        if hostWidth >= 28 and hostHeight >= 28 and hostWidth <= 80 and hostHeight <= 80 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function AcceptIconAnchor(texture, hostButton)
+    if IsUsableIconTexture(texture, hostButton) then
+        return texture
+    end
+    return nil
+end
+
+local function GetSelectedTrainerServiceIndex()
+    if ClassTrainerFrame and ClassTrainerFrame.selectedService then
+        return ClassTrainerFrame.selectedService
+    end
+
+    if GetTrainerSelectionIndex then
+        return GetTrainerSelectionIndex()
+    end
+end
+
+local function IsTrainerServiceHeader(serviceIndex)
+    return GetTrainerServiceType(serviceIndex) == "header"
+end
+
+function GQ.Indicator:PrimeDataItemInfo()
+    if not GQ.Data or not GQ.Data.entries then
+        return
+    end
+
+    self.itemNameCache = self.itemNameCache or {}
+
+    for _, entry in ipairs(GQ.Data.entries) do
+        if entry.itemId then
+            local name = GetItemInfo(entry.itemId)
+            if name then
+                self.itemNameCache[entry.itemId] = name
+            elseif GQ.Data.GetItemDisplayName then
+                name = GQ.Data:GetItemDisplayName(entry.itemId)
+                if name then
+                    self.itemNameCache[entry.itemId] = name
+                end
+            end
+        end
+    end
+end
+
+function GQ.Indicator:PrimeUpgradeItemInfo()
+    if not self.upgradeItems then
+        return
+    end
+
+    for itemId in pairs(self.upgradeItems) do
+        GetItemInfo(itemId)
+    end
+end
+
+function GQ.Indicator:MatchTrainerServiceName(serviceName)
+    if not serviceName then
+        return nil
+    end
+
+    local trimmed = strtrim(serviceName)
+    local keys = { trimmed:lower() }
+    local stripped = trimmed:match("^[^:]+:%s*(.+)$")
+    if stripped then
+        keys[#keys + 1] = strtrim(stripped):lower()
+    end
+
+    for _, key in ipairs(keys) do
+        if self.upgradeItemNames and self.upgradeItemNames[key] then
+            return self.upgradeItemNames[key]
+        end
+    end
+
+    self.itemNameCache = self.itemNameCache or {}
+
+    for _, key in ipairs(keys) do
+        for itemId, name in pairs(self.itemNameCache) do
+            if self.upgradeItems[itemId] and name:lower() == key then
+                return itemId
+            end
+        end
+    end
+
+    if self.upgradeItems then
+        for itemId in pairs(self.upgradeItems) do
+            local name = (GQ.Data and GQ.Data.GetItemDisplayName and GQ.Data:GetItemDisplayName(itemId))
+                or GetItemInfo(itemId)
+                or self.itemNameCache[itemId]
+            if name then
+                self.itemNameCache[itemId] = name
+                local lowerName = name:lower()
+                for _, key in ipairs(keys) do
+                    if lowerName == key then
+                        self.upgradeItemNames = self.upgradeItemNames or {}
+                        self.upgradeItemNames[key] = itemId
+                        return itemId
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+function GQ.Indicator:ResolveTrainerServiceItemId(index)
+    local link = self:ResolveTrainerServiceLink(index)
+    return link and GetItemIdFromLink(link) or nil
+end
+
+function GQ.Indicator:ResolveTrainerServiceLink(index)
+    if not index or index <= 0 then
+        return nil
+    end
+
+    if IsTradeskillTrainer and IsTradeskillTrainer() and GameTooltip and GameTooltip.SetTrainerService then
+        local link = ResolveLinkFromTooltip(function()
+            GameTooltip:SetTrainerService(index)
+        end)
+        if link then
+            return link
+        end
+    end
+
+    local serviceName = GetTrainerServiceName(index)
+    local matchedId = self:MatchTrainerServiceName(serviceName)
+    if matchedId then
+        return "item:" .. matchedId
+    end
+
+    if GetTrainerServiceItemLink then
+        local link = GetTrainerServiceItemLink(index)
+        if link then
+            return link
+        end
+    end
+
+    if GameTooltip and GameTooltip.SetTrainerService then
+        local link = ResolveLinkFromTooltip(function()
+            GameTooltip:SetTrainerService(index)
+        end)
+        if link then
+            return link
+        end
+    end
+
+    return nil
+end
+
+function GQ.Indicator:UpdateTrainerDetailIcon()
+    local detailIcon = _G.ClassTrainerSkillIcon
+    if not detailIcon or (detailIcon.IsShown and not detailIcon:IsShown()) then
+        detailIcon = self:FindTrainerDetailIconHost()
+    end
+    if not detailIcon then
+        return
+    end
+
+    local index = GetSelectedTrainerServiceIndex()
+    if not index or index <= 0 or IsTrainerServiceHeader(index) then
+        self:HideButton(detailIcon)
+        return
+    end
+
+    local link = self:ResolveTrainerServiceLink(index)
+    if link then
+        self:UpdateButton(detailIcon, link)
+    else
+        self:HideButton(detailIcon)
+    end
+end
+
+function GQ.Indicator:FindTrainerDetailIconHost()
+    if _G.ClassTrainerSkillIcon and _G.ClassTrainerSkillIcon:IsShown() then
+        return _G.ClassTrainerSkillIcon
+    end
+
+    if not ClassTrainerFrame then
+        return _G.ClassTrainerSkillIcon
+    end
+
+    local inset = ClassTrainerFrame.bottomInset or ClassTrainerFrame.BottomInset
+    if inset then
+        local bestHost
+        local bestSize = 0
+
+        local function ScanFrame(frame, depth)
+            if not frame or depth > 8 then
+                return
+            end
+
+            if frame.IsObjectType and (frame:IsObjectType("Button") or frame:IsObjectType("Frame")) then
+                if IsTrainerDetailIconHost(frame) or (not IsTrainerListRow(frame) and self:GetIconAnchor(frame)) then
+                    local width = frame:GetWidth() or 0
+                    if width > bestSize then
+                        bestHost = frame
+                        bestSize = width
+                    end
+                end
+            end
+
+            if frame.GetChildren then
+                local ok, children = pcall(frame.GetChildren, frame)
+                if ok and children then
+                    for _, child in ipairs(children) do
+                        ScanFrame(child, depth + 1)
+                    end
+                end
+            end
+        end
+
+        ScanFrame(inset, 0)
+        if bestHost then
+            return bestHost
+        end
+    end
+
+    if _G.ClassTrainerSkillIcon then
+        return _G.ClassTrainerSkillIcon
+    end
+
+    for _, key in ipairs({ "Icon", "skillIcon", "SkillIcon", "detailIcon" }) do
+        if ClassTrainerFrame[key] then
+            return ClassTrainerFrame[key]
+        end
+    end
+
+    return nil
+end
+
+function GQ.Indicator:FindTradeSkillDetailIconHost()
+    local candidates = {
+        _G.TradeSkillSkillIcon,
+        _G.TradeSkillDetailIcon,
+        _G.TradeSkillDetailItemIcon,
+        TradeSkillFrame and TradeSkillFrame.DetailIcon,
+        TradeSkillFrame and TradeSkillFrame.SkillIcon,
+    }
+
+    for _, candidate in ipairs(candidates) do
+        if candidate and candidate.IsShown and candidate:IsShown() then
+            return candidate
+        end
+    end
+
+    for _, candidate in ipairs(candidates) do
+        if candidate then
+            return candidate
+        end
+    end
+
+    return nil
+end
+
+function GQ.Indicator:GetTradeSkillSelectionIndex()
+    if TradeSkillFrame and TradeSkillFrame.selectedSkill then
+        return TradeSkillFrame.selectedSkill
+    end
+
+    if GetTradeSkillSelectionIndex then
+        return GetTradeSkillSelectionIndex()
+    end
+end
+
+local function IsTradeSkillHeader(index)
+    if not index or index <= 0 or not GetTradeSkillInfo then
+        return true
+    end
+
+    local _, skillType = GetTradeSkillInfo(index)
+    return skillType == "header"
+end
+
+function GQ.Indicator:UpdateTradeSkillDetailIcon()
+    local detailIcon = self:FindTradeSkillDetailIconHost()
+    if not detailIcon then
+        return
+    end
+
+    local index = self:GetTradeSkillSelectionIndex()
+    if not index or index <= 0 or IsTradeSkillHeader(index) then
+        self:HideButton(detailIcon)
+        return
+    end
+
+    local link = self:ResolveTradeSkillOutputLink(index)
+    if link then
+        self:UpdateButton(detailIcon, link)
+    else
+        self:HideButton(detailIcon)
+    end
+end
+
+function GQ.Indicator:HideProfessionListRows(getButton, count)
+    count = count or 0
+    for i = 1, count do
+        local button = getButton(i)
+        if button then
+            self:HideButton(button)
+        end
+    end
+end
+
+function GQ.Indicator:UpdateClassTrainerFrame()
+    if not ClassTrainerFrame or not ClassTrainerFrame:IsShown() then
+        return
+    end
+
+    if not GetNumTrainerServices or not GetTrainerServiceInfo then
+        return
+    end
+
+    local displayed = CLASS_TRAINER_SKILLS_DISPLAYED or 11
+    self:HideProfessionListRows(function(i)
+        return _G["ClassTrainerSkill" .. i]
+    end, displayed)
+
+    if ClassTrainerFrame.ScrollBox and ClassTrainerFrame.ScrollBox.ForEachFrame then
+        ClassTrainerFrame.ScrollBox:ForEachFrame(function(button)
+            GQ.Indicator:HideButton(button)
+        end)
+    end
+
+    if ClassTrainerFrame.skillStepButton then
+        self:HideButton(ClassTrainerFrame.skillStepButton)
+    end
+
+    self:UpdateTrainerDetailIcon()
+end
+
+function GQ.Indicator:ScheduleTrainerRefresh()
+    if not C_Timer or not C_Timer.After then
+        self:UpdateClassTrainerFrame()
+        return
+    end
+
+    local delays = { 0, 0.05, 0.15, 0.35, 0.6, 1.0 }
+    for _, delay in ipairs(delays) do
+        C_Timer.After(delay, function()
+            if not GQ.Indicator or not ClassTrainerFrame or not ClassTrainerFrame:IsShown() then
+                return
+            end
+            if delay >= 0.35 then
+                GQ.Indicator:RebuildCache()
+            end
+            GQ.Indicator:UpdateClassTrainerFrame()
+        end)
+    end
+end
+
+function GQ.Indicator:StartTrainerDetailWatcher()
+    self:StopTrainerDetailWatcher()
+
+    local frame = CreateFrame("Frame")
+    local elapsed = 0
+    local ticks = 0
+    frame:SetScript("OnUpdate", function(_, dt)
+        if not ClassTrainerFrame or not ClassTrainerFrame:IsShown() then
+            frame:SetScript("OnUpdate", nil)
+            GQ.Indicator.trainerDetailWatcher = nil
+            return
+        end
+
+        elapsed = elapsed + dt
+        if elapsed < 0.2 then
+            return
+        end
+        elapsed = 0
+        ticks = ticks + 1
+
+        GQ.Indicator:UpdateTrainerDetailIcon()
+
+        if ticks >= 15 then
+            frame:SetScript("OnUpdate", nil)
+            GQ.Indicator.trainerDetailWatcher = nil
+        end
+    end)
+    self.trainerDetailWatcher = frame
+end
+
+function GQ.Indicator:StopTrainerDetailWatcher()
+    if self.trainerDetailWatcher then
+        self.trainerDetailWatcher:SetScript("OnUpdate", nil)
+        self.trainerDetailWatcher = nil
+    end
+end
+
+function GQ.Indicator:EnsureTrainerListButtonHooks()
+    local displayed = CLASS_TRAINER_SKILLS_DISPLAYED or 11
+    for i = 1, displayed do
+        local button = _G["ClassTrainerSkill" .. i]
+        if button and not button.gqTrainerListHooked then
+            button.gqTrainerListHooked = true
+            button:HookScript("OnClick", function()
+                GQ.Indicator:ScheduleTrainerRefresh()
+            end)
+        end
+    end
+end
+
+function GQ.Indicator:EnsureTrainerFrameHooks()
+    if not ClassTrainerFrame or ClassTrainerFrame.gqTrainerFrameHooked then
+        return
+    end
+
+    ClassTrainerFrame.gqTrainerFrameHooked = true
+
+    ClassTrainerFrame:HookScript("OnShow", function()
+        GQ.Indicator:EnsureTrainerHooks()
+        GQ.Indicator:EnsureTrainerListButtonHooks()
+        GQ.Indicator:ScheduleTrainerRefresh()
+        GQ.Indicator:StartTrainerDetailWatcher()
+    end)
+
+    ClassTrainerFrame:HookScript("OnHide", function()
+        GQ.Indicator:StopTrainerDetailWatcher()
+    end)
+
+    if ClassTrainerFrame:IsShown() then
+        self:EnsureTrainerHooks()
+        self:EnsureTrainerListButtonHooks()
+        self:ScheduleTrainerRefresh()
+        self:StartTrainerDetailWatcher()
+    end
+end
+
+function GQ.Indicator:OnTrainerOpen()
+    self:EnsureTrainerHooks()
+    self:EnsureTrainerFrameHooks()
+    self:EnsureTrainerListButtonHooks()
+    self:PrimeDataItemInfo()
+    self:RebuildCache()
+    self:PrimeUpgradeItemInfo()
+    self:ScheduleTrainerRefresh()
+    self:StartTrainerDetailWatcher()
+end
+
 function GQ.Indicator:GetIconAnchor(button)
     if not button then
         return nil
     end
 
-    if button.icon and button.icon.IsObjectType and button.icon:IsObjectType("Texture") then
-        return button.icon
+    if IsProfessionListRow(button) then
+        return nil
     end
-    if button.Icon and button.Icon.IsObjectType and button.Icon:IsObjectType("Texture") then
-        return button.Icon
+
+    if button.IsObjectType and button:IsObjectType("Texture") then
+        local parent = button.GetParent and button:GetParent()
+        if IsUsableIconTexture(button, parent) then
+            return button
+        end
+        return nil
     end
+
+    if IsDetailIconHost(button) then
+        if button.icon and not IsExpandCollapseTexture(button.icon) then
+            return button.icon
+        end
+        if button.IconTexture and not IsExpandCollapseTexture(button.IconTexture) then
+            return button.IconTexture
+        end
+        if button.GetNormalTexture then
+            local normal = button:GetNormalTexture()
+            if normal and not IsExpandCollapseTexture(normal) then
+                return normal
+            end
+        end
+        return button
+    end
+
+    if button.icon then
+        local anchor = AcceptIconAnchor(button.icon, button)
+        if anchor then
+            return anchor
+        end
+    end
+
+    if button.Icon then
+        local anchor = AcceptIconAnchor(button.Icon, button)
+        if anchor then
+            return anchor
+        end
+    end
+
     if button.IconTexture then
-        return button.IconTexture
+        local anchor = AcceptIconAnchor(button.IconTexture, button)
+        if anchor then
+            return anchor
+        end
     end
 
     local name = button.GetName and button:GetName()
     if name then
         local named = _G[name .. "IconTexture"] or _G[name .. "Icon"]
-        if named then
-            return named
+        local anchor = AcceptIconAnchor(named, button)
+        if anchor then
+            return anchor
         end
     end
 
     if button.IconFrame then
-        return button.IconFrame.icon or button.IconFrame.Icon or button.IconFrame
+        local frameIcon = button.IconFrame.icon or button.IconFrame.Icon
+        local anchor = AcceptIconAnchor(frameIcon, button)
+        if anchor then
+            return anchor
+        end
     end
 
-    return button
+    if IsDetailIconHost(button) and button.GetNormalTexture then
+        local normal = button:GetNormalTexture()
+        local anchor = AcceptIconAnchor(normal, button)
+        if anchor then
+            return anchor
+        end
+    end
+
+    return nil
+end
+
+function GQ.Indicator:EnsurePulseTicker()
+    if self.pulseTicker then
+        return
+    end
+
+    self.pulseOverlays = {}
+
+    local ticker = CreateFrame("Frame")
+    ticker:Hide()
+    ticker:SetScript("OnUpdate", function()
+        local tracker = GQ.Indicator
+        local overlays = tracker.pulseOverlays
+        if not overlays or not next(overlays) then
+            ticker:Hide()
+            return
+        end
+
+        local wave = 0.5 + 0.5 * math.sin(GetTime() * PULSE_SPEED)
+        local arrowAlpha = PULSE_ALPHA_MIN + (PULSE_ALPHA_MAX - PULSE_ALPHA_MIN) * wave
+        local glowAlpha = PULSE_GLOW_MIN + (PULSE_GLOW_MAX - PULSE_GLOW_MIN) * wave
+        local glowScale = ARROW_GLOW_SCALE + (0.1 * wave)
+
+        for overlay in pairs(overlays) do
+            if overlay:IsShown() and overlay.gqArrow then
+                overlay.gqArrow:SetAlpha(arrowAlpha)
+                if overlay.gqGlow then
+                    overlay.gqGlow:SetAlpha(glowAlpha)
+                    overlay.gqGlow:SetSize(ARROW_WIDTH * glowScale, ARROW_HEIGHT * glowScale)
+                end
+            else
+                overlays[overlay] = nil
+            end
+        end
+    end)
+
+    self.pulseTicker = ticker
+end
+
+function GQ.Indicator:RegisterOverlayPulse(overlay)
+    if not overlay then
+        return
+    end
+
+    self:EnsurePulseTicker()
+    self.pulseOverlays[overlay] = true
+    self.pulseTicker:Show()
+end
+
+function GQ.Indicator:UnregisterOverlayPulse(overlay)
+    if not overlay then
+        return
+    end
+
+    if self.pulseOverlays then
+        self.pulseOverlays[overlay] = nil
+    end
+
+    if overlay.gqArrow then
+        overlay.gqArrow:SetAlpha(1)
+    end
+    if overlay.gqGlow then
+        overlay.gqGlow:SetAlpha(0)
+    end
+end
+
+function GQ.Indicator:CreateOverlayTextures(overlay)
+    local glow = overlay:CreateTexture(nil, "BACKGROUND")
+    glow:SetTexture(ARROW_TEXTURE)
+    glow:SetTexCoord(0.08, 0.92, 0.02, 0.72)
+    glow:SetVertexColor(ARROW_GLOW_COLOR[1], ARROW_GLOW_COLOR[2], ARROW_GLOW_COLOR[3])
+    if glow.SetBlendMode then
+        glow:SetBlendMode("ADD")
+    end
+    glow:SetAlpha(0)
+
+    local arrow = overlay:CreateTexture(nil, "ARTWORK")
+    arrow:SetTexture(ARROW_TEXTURE)
+    arrow:SetTexCoord(0.08, 0.92, 0.02, 0.72)
+    arrow:SetVertexColor(ARROW_COLOR[1], ARROW_COLOR[2], ARROW_COLOR[3])
+
+    overlay.gqGlow = glow
+    overlay.gqArrow = arrow
+    overlay.gqArrowVersion = ARROW_LAYOUT_VERSION
+end
+
+function GQ.Indicator:ApplyOverlayLayout(overlay, anchor)
+    local arrow = overlay.gqArrow
+    local glow = overlay.gqGlow
+    if not arrow then
+        return
+    end
+
+    overlay:SetSize(ARROW_WIDTH, ARROW_HEIGHT)
+    overlay:ClearAllPoints()
+    overlay:SetPoint("BOTTOMRIGHT", anchor, "TOPRIGHT", 0, ARROW_OVERLAP)
+
+    arrow:ClearAllPoints()
+    arrow:SetAllPoints(overlay)
+
+    if glow then
+        glow:ClearAllPoints()
+        glow:SetPoint("CENTER", arrow, "CENTER", 0, 0)
+        glow:SetSize(ARROW_WIDTH * ARROW_GLOW_SCALE, ARROW_HEIGHT * ARROW_GLOW_SCALE)
+    end
 end
 
 function GQ.Indicator:EnsureOverlay(button)
@@ -48,29 +918,58 @@ function GQ.Indicator:EnsureOverlay(button)
         return nil
     end
 
-    if button.gqUpgradeArrow then
-        return button.gqUpgradeArrow
-    end
-
     local anchor = self:GetIconAnchor(button)
     if not anchor then
+        self:HideButton(button)
         return nil
     end
 
-    local arrow = anchor:CreateTexture(nil, "OVERLAY", nil, 7)
-    arrow:SetSize(ARROW_SIZE, ARROW_SIZE)
-    arrow:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", 1, 1)
-    arrow:SetTexture(ARROW_TEXTURE)
-    arrow:SetVertexColor(ARROW_COLOR[1], ARROW_COLOR[2], ARROW_COLOR[3])
-    arrow:Hide()
+    local parent = anchor.GetParent and anchor:GetParent() or button
+    if not parent or (parent.IsObjectType and not parent:IsObjectType("Frame") and not parent:IsObjectType("Button")) then
+        parent = button
+    end
 
-    button.gqUpgradeArrow = arrow
-    return arrow
+    local overlay = button.gqUpgradeOverlay
+    if overlay and overlay.gqArrowVersion ~= ARROW_LAYOUT_VERSION then
+        overlay:Hide()
+        overlay:SetParent(nil)
+        button.gqUpgradeOverlay = nil
+        overlay = nil
+    end
+
+    if not overlay then
+        overlay = CreateFrame("Frame", nil, parent)
+        local frameLevel = parent.GetFrameLevel and parent:GetFrameLevel() or 1
+        if ClassTrainerFrame and ClassTrainerFrame.GetFrameLevel then
+            frameLevel = math.max(frameLevel, ClassTrainerFrame:GetFrameLevel() + 12)
+        end
+        if TradeSkillFrame and TradeSkillFrame.GetFrameLevel then
+            frameLevel = math.max(frameLevel, TradeSkillFrame:GetFrameLevel() + 12)
+        end
+        overlay:SetFrameLevel(frameLevel + 10)
+        if IsTrainerDetailIconHost(button) then
+            overlay:SetFrameStrata("HIGH")
+            overlay:SetFrameLevel(frameLevel + 25)
+        elseif IsTradeSkillDetailIconHost(button) then
+            overlay:SetFrameStrata("HIGH")
+            overlay:SetFrameLevel(frameLevel + 25)
+        end
+        self:CreateOverlayTextures(overlay)
+        button.gqUpgradeOverlay = overlay
+        overlay.gqAnchor = anchor
+    elseif overlay.gqAnchor ~= anchor then
+        overlay.gqAnchor = anchor
+    end
+
+    self:ApplyOverlayLayout(overlay, anchor)
+    overlay:Hide()
+    return overlay
 end
 
 function GQ.Indicator:HideButton(button)
-    if button and button.gqUpgradeArrow then
-        button.gqUpgradeArrow:Hide()
+    if button and button.gqUpgradeOverlay then
+        self:UnregisterOverlayPulse(button.gqUpgradeOverlay)
+        button.gqUpgradeOverlay:Hide()
     end
 end
 
@@ -80,20 +979,27 @@ function GQ.Indicator:UpdateButton(button, link)
     end
 
     local itemId = GetItemIdFromLink(link)
-    local arrow = self:EnsureOverlay(button)
-    if not arrow then
+    local overlay = self:EnsureOverlay(button)
+    if not overlay then
         return
     end
 
-    if itemId and self:IsUpgradeItem(itemId) then
-        arrow:Show()
+    local isUpgrade = itemId and self:IsUpgradeItem(itemId)
+    local isObtained = itemId and GQ.Log and GQ.Log.IsItemIdObtained and GQ.Log:IsItemIdObtained(itemId)
+
+    if isUpgrade and not isObtained then
+        overlay:Show()
+        self:RegisterOverlayPulse(overlay)
     else
-        arrow:Hide()
+        self:UnregisterOverlayPulse(overlay)
+        overlay:Hide()
     end
 end
 
 function GQ.Indicator:RebuildCache()
     self.upgradeItems = {}
+    self.upgradeItemNames = {}
+    self.itemNameCache = self.itemNameCache or {}
 
     if not GQ.Data or not GQ.Data.GetSlotsForClass then
         return
@@ -107,8 +1013,17 @@ function GQ.Indicator:RebuildCache()
     for _, slotName in ipairs(GQ.Data:GetSlotsForClass(classFile)) do
         local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, 3)
         for _, entry in ipairs(upgrades) do
-            if entry.itemId then
+            if entry.itemId and not (GQ.Log and GQ.Log.IsItemIdObtained and GQ.Log:IsItemIdObtained(entry.itemId)) then
                 self.upgradeItems[entry.itemId] = true
+                local itemName = (GQ.Data.GetItemDisplayName and GQ.Data:GetItemDisplayName(entry.itemId))
+                    or GetItemInfo(entry.itemId)
+                    or self.itemNameCache[entry.itemId]
+                if itemName then
+                    self.itemNameCache[entry.itemId] = itemName
+                    self.upgradeItemNames[itemName:lower()] = entry.itemId
+                else
+                    GetItemInfo(entry.itemId)
+                end
             end
         end
     end
@@ -274,71 +1189,148 @@ function GQ.Indicator:UpdateGroupLootFrames()
 end
 
 function GQ.Indicator:UpdateTradeSkillFrame()
-    if not TradeSkillFrame or not TradeSkillFrame:IsShown() or not GetTradeSkillItemLink then
+    if not TradeSkillFrame or not TradeSkillFrame:IsShown() then
         return
     end
 
-    local offset = 0
-    if TradeSkillListScrollFrame and FauxScrollFrame_GetOffset then
-        offset = FauxScrollFrame_GetOffset(TradeSkillListScrollFrame) or 0
+    local displayed = TRADE_SKILLS_DISPLAYED or 8
+    self:HideProfessionListRows(function(i)
+        return _G["TradeSkillSkill" .. i]
+    end, displayed)
+
+    if TradeSkillFrame.ScrollBox and TradeSkillFrame.ScrollBox.ForEachFrame then
+        TradeSkillFrame.ScrollBox:ForEachFrame(function(button)
+            GQ.Indicator:HideButton(button)
+        end)
     end
 
-    local displayed = TRADE_SKILLS_DISPLAYED or 8
-    for i = 1, displayed do
-        local button = _G["TradeSkillSkill" .. i]
-        if button then
-            if button:IsShown() then
-                self:UpdateButton(button, GetTradeSkillItemLink(offset + i))
-            else
-                self:HideButton(button)
-            end
+    self:UpdateTradeSkillDetailIcon()
+end
+
+function GQ.Indicator:IsMerchantBuybackTab()
+    if not MerchantFrame then
+        return false
+    end
+
+    if MerchantFrame.selectedTab == 2 then
+        return true
+    end
+
+    local tab = _G.MerchantFrameTab2
+    if tab and tab.IsEnabled and tab:IsEnabled() and tab.GetButtonState then
+        return tab:GetButtonState() == "PUSHED"
+    end
+
+    return false
+end
+
+function GQ.Indicator:GetMerchantSlotIndex(slotOnPage)
+    local itemsPerPage = MERCHANT_ITEMS_PER_PAGE or 10
+    local page = (MerchantFrame and MerchantFrame.page) or 1
+    return ((page - 1) * itemsPerPage) + slotOnPage
+end
+
+function GQ.Indicator:ResolveMerchantLink(index, itemButton)
+    if itemButton and itemButton.link then
+        return itemButton.link
+    end
+
+    if index and index > 0 and GetMerchantItemLink then
+        local link = GetMerchantItemLink(index)
+        if link then
+            return link
         end
     end
 
-    local detailIcon = _G.TradeSkillDetailIcon
-        or (TradeSkillFrame and TradeSkillFrame.DetailIcon)
-        or _G.TradeSkillDetailItemIcon
-    if detailIcon and GetTradeSkillSelectionIndex then
-        local index = GetTradeSkillSelectionIndex()
+    if index and index > 0 and GameTooltip and GameTooltip.SetMerchantItem then
+        GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+        GameTooltip:SetMerchantItem(index)
+        local _, link = GameTooltip:GetItem()
+        GameTooltip:Hide()
+        return link
+    end
+
+    return nil
+end
+
+function GQ.Indicator:UpdateMerchantFrame()
+    if not MerchantFrame or not MerchantFrame:IsShown() then
+        return
+    end
+
+    local itemsPerPage = MERCHANT_ITEMS_PER_PAGE or 10
+
+    if self:IsMerchantBuybackTab() and GetBuybackItemLink then
+        for i = 1, itemsPerPage do
+            local itemButton = _G["MerchantItem" .. i .. "ItemButton"]
+            if itemButton then
+                if itemButton:IsShown() then
+                    self:UpdateButton(itemButton, GetBuybackItemLink(i))
+                else
+                    self:HideButton(itemButton)
+                end
+            end
+        end
+        return
+    end
+
+    for i = 1, itemsPerPage do
+        local itemButton = _G["MerchantItem" .. i .. "ItemButton"]
+        if itemButton then
+            if itemButton:IsShown() then
+                local index = itemButton.GetID and itemButton:GetID()
+                if not index or index <= 0 then
+                    index = self:GetMerchantSlotIndex(i)
+                end
+                self:UpdateButton(itemButton, self:ResolveMerchantLink(index, itemButton))
+            else
+                self:HideButton(itemButton)
+            end
+        end
+    end
+end
+
+function GQ.Indicator:UpdateCraftFrame()
+    if not CraftFrame or not CraftFrame:IsShown() then
+        return
+    end
+
+    local displayed = CRAFTS_DISPLAYED or 8
+    self:HideProfessionListRows(function(i)
+        return _G["Craft" .. i]
+    end, displayed)
+
+    local detailIcon = _G.CraftIcon or (CraftFrame and CraftFrame.DetailIcon)
+    if detailIcon and GetCraftSelectionIndex then
+        local index = GetCraftSelectionIndex()
         if index and index > 0 then
-            self:UpdateButton(detailIcon, GetTradeSkillItemLink(index))
+            self:UpdateButton(detailIcon, self:ResolveCraftOutputLink(index))
         else
             self:HideButton(detailIcon)
         end
     end
 end
 
-function GQ.Indicator:UpdateCraftFrame()
-    if not CraftFrame or not CraftFrame:IsShown() or not GetCraftItemLink then
+function GQ.Indicator:ScheduleProfessionRefresh()
+    if not C_Timer or not C_Timer.After then
+        self:UpdateTradeSkillFrame()
+        self:UpdateCraftFrame()
         return
     end
 
-    local offset = 0
-    if CraftListScrollFrame and FauxScrollFrame_GetOffset then
-        offset = FauxScrollFrame_GetOffset(CraftListScrollFrame) or 0
-    end
-
-    local displayed = CRAFTS_DISPLAYED or 8
-    for i = 1, displayed do
-        local button = _G["Craft" .. i]
-        if button then
-            if button:IsShown() then
-                self:UpdateButton(button, GetCraftItemLink(offset + i))
-            else
-                self:HideButton(button)
-            end
+    C_Timer.After(0, function()
+        if GQ.Indicator then
+            GQ.Indicator:UpdateTradeSkillFrame()
+            GQ.Indicator:UpdateCraftFrame()
         end
-    end
+    end)
 
-    local detailIcon = _G.CraftIcon or (CraftFrame and CraftFrame.DetailIcon)
-    if detailIcon and GetCraftSelectionIndex then
-        local index = GetCraftSelectionIndex()
-        if index and index > 0 then
-            self:UpdateButton(detailIcon, GetCraftItemLink(index))
-        else
-            self:HideButton(detailIcon)
+    C_Timer.After(0.15, function()
+        if GQ.Indicator then
+            GQ.Indicator:UpdateTradeSkillFrame()
+            GQ.Indicator:UpdateCraftFrame()
         end
-    end
+    end)
 end
 
 function GQ.Indicator:RefreshAll()
@@ -347,6 +1339,72 @@ function GQ.Indicator:RefreshAll()
     self:UpdateQuestLogRewards()
     self:UpdateTradeSkillFrame()
     self:UpdateCraftFrame()
+    self:UpdateMerchantFrame()
+    self:UpdateClassTrainerFrame()
+end
+
+function GQ.Indicator:EnsureTrainerHooks()
+    if self.trainerHooksReady then
+        return
+    end
+
+    if type(ClassTrainerFrame_Update) ~= "function" then
+        return
+    end
+
+    self.trainerHooksReady = true
+
+    self:HookFunction("ClassTrainerFrame_Update", function()
+        GQ.Indicator:UpdateClassTrainerFrame()
+    end)
+
+    self:HookFunction("ClassTrainer_SetSelection", function()
+        GQ.Indicator:ScheduleTrainerRefresh()
+    end)
+
+    self:HookFunction("ClassTrainer_ShowSkillDetails", function()
+        GQ.Indicator:ScheduleTrainerRefresh()
+    end)
+
+    self:HookFunction("BuyTrainerService", function()
+        GQ.Indicator:ScheduleTrainerRefresh()
+    end)
+
+    self:HookFunction("ClassTrainerFrame_OnShow", function()
+        GQ.Indicator:OnTrainerOpen()
+    end)
+
+    self:HookFunction("ClassTrainerFrame_Show", function()
+        GQ.Indicator:OnTrainerOpen()
+    end)
+
+    self:HookFunction("ClassTrainerSkillButton_OnClick", function()
+        GQ.Indicator:ScheduleTrainerRefresh()
+    end)
+
+    self:UpdateClassTrainerFrame()
+end
+
+function GQ.Indicator:EnsureMerchantHooks()
+    if self.merchantHooksReady then
+        return
+    end
+
+    if type(MerchantFrame_Update) ~= "function" then
+        return
+    end
+
+    self.merchantHooksReady = true
+
+    self:HookFunction("MerchantFrame_Update", function()
+        GQ.Indicator:UpdateMerchantFrame()
+    end)
+
+    if type(MerchantFrame_UpdateMerchantInfo) == "function" then
+        self:HookFunction("MerchantFrame_UpdateMerchantInfo", function()
+            GQ.Indicator:UpdateMerchantFrame()
+        end)
+    end
 end
 
 function GQ.Indicator:HookFunction(name, handler)
@@ -358,8 +1416,11 @@ end
 
 function GQ.Indicator:Init()
     self.hooks = {}
+    self.itemNameCache = {}
 
+    self:PrimeDataItemInfo()
     self:RebuildCache()
+    self:PrimeUpgradeItemInfo()
 
     self:HookFunction("LootFrame_Update", function()
         self:UpdateLootFrame()
@@ -385,11 +1446,110 @@ function GQ.Indicator:Init()
         self:UpdateCraftFrame()
     end)
 
+    self:HookFunction("TradeSkillFrame_SetSelection", function()
+        self:ScheduleProfessionRefresh()
+    end)
+
+    self:HookFunction("TradeSkillFrame_Update", function()
+        self:UpdateTradeSkillFrame()
+    end)
+
+    self:HookFunction("CraftFrame_SetSelection", function()
+        self:ScheduleProfessionRefresh()
+    end)
+
+    self:EnsureMerchantHooks()
+    self:EnsureTrainerHooks()
+
     local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("ADDON_LOADED")
     eventFrame:RegisterEvent("START_LOOT_ROLL")
     eventFrame:RegisterEvent("LOOT_OPENED")
     eventFrame:RegisterEvent("LOOT_CLOSED")
-    eventFrame:SetScript("OnEvent", function()
-        self:RefreshAll()
+    eventFrame:RegisterEvent("MERCHANT_SHOW")
+    eventFrame:RegisterEvent("MERCHANT_UPDATE")
+    eventFrame:RegisterEvent("TRADE_SKILL_SHOW")
+    eventFrame:RegisterEvent("TRADE_SKILL_UPDATE")
+    eventFrame:RegisterEvent("CRAFT_SHOW")
+    eventFrame:RegisterEvent("CRAFT_UPDATE")
+    eventFrame:RegisterEvent("TRAINER_SHOW")
+    eventFrame:RegisterEvent("TRAINER_UPDATE")
+    eventFrame:RegisterEvent("TRAINER_DESCRIPTION_UPDATE")
+    eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
+        if event == "ADDON_LOADED" and (arg1 == "Blizzard_TrainerUI" or arg1 == "Blizzard_TradeSkillUI") then
+            GQ.Indicator:EnsureTrainerHooks()
+            GQ.Indicator:EnsureTrainerFrameHooks()
+            if ClassTrainerFrame and ClassTrainerFrame:IsShown() then
+                GQ.Indicator:OnTrainerOpen()
+            end
+            if arg1 == "Blizzard_TradeSkillUI" then
+                GQ.Indicator:HookFunction("TradeSkillFrame_Update", function()
+                    GQ.Indicator:UpdateTradeSkillFrame()
+                end)
+                GQ.Indicator:HookFunction("TradeSkillFrame_SetSelection", function()
+                    GQ.Indicator:ScheduleProfessionRefresh()
+                end)
+            end
+            return
+        end
+
+        if event == "MERCHANT_SHOW" then
+            GQ.Indicator:EnsureMerchantHooks()
+            GQ.Indicator:RebuildCache()
+        end
+
+        if event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_UPDATE"
+            or event == "CRAFT_SHOW" or event == "CRAFT_UPDATE"
+        then
+            GQ.Indicator:RebuildCache()
+            GQ.Indicator:ScheduleProfessionRefresh()
+            return
+        end
+
+        if event == "PLAYER_ENTERING_WORLD" then
+            GQ.Indicator:PrimeDataItemInfo()
+            GQ.Indicator:RebuildCache()
+            GQ.Indicator:PrimeUpgradeItemInfo()
+            return
+        end
+
+        if event == "GET_ITEM_INFO_RECEIVED" then
+            local itemId = arg1
+            if itemId then
+                GQ.Indicator.itemNameCache = GQ.Indicator.itemNameCache or {}
+                local name = GetItemInfo(itemId)
+                if name then
+                    GQ.Indicator.itemNameCache[itemId] = name
+                end
+            else
+                GQ.Indicator:PrimeDataItemInfo()
+            end
+
+            GQ.Indicator:RebuildCache()
+
+            if ClassTrainerFrame and ClassTrainerFrame:IsShown() then
+                GQ.Indicator:ScheduleTrainerRefresh()
+            else
+                GQ.Indicator:RefreshAll()
+            end
+            return
+        end
+
+        if event == "TRAINER_SHOW" or event == "TRAINER_UPDATE" or event == "TRAINER_DESCRIPTION_UPDATE" then
+            GQ.Indicator:OnTrainerOpen()
+            return
+        end
+
+        GQ.Indicator:RefreshAll()
+
+        if (event == "MERCHANT_SHOW" or event == "MERCHANT_UPDATE") and C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if GQ.Indicator then
+                    GQ.Indicator:UpdateMerchantFrame()
+                end
+            end)
+        end
     end)
 end
