@@ -37,7 +37,7 @@ local function OpenUpgradeInLog(button)
 
     gq.Popup:Hide()
     gq.Log:Show()
-    gq.Log:SelectHunt(entryId)
+    gq.Log:SelectHunt(entryId, true)
 end
 
 local function OnUpgradeIconClick(self, mouseButton)
@@ -145,11 +145,34 @@ function GQ.Popup:ShowDismissLayer()
     self.dismissLayer:Show()
 end
 
+function GQ.Popup:EnsureItemInfoListener()
+    if self.itemInfoListener then
+        return
+    end
+
+    local refreshFrame = CreateFrame("Frame")
+    refreshFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    refreshFrame:SetScript("OnEvent", function()
+        local popup = _G.GearQuest and _G.GearQuest.Popup
+        if not popup or not popup.container or not popup.container:IsShown() then
+            return
+        end
+        if popup.activeSlotName and popup.activeSlotButton then
+            popup:ShowForSlot(popup.activeSlotName, popup.activeSlotButton)
+        else
+            popup:RefreshIcons()
+        end
+    end)
+    self.itemInfoListener = refreshFrame
+end
+
 function GQ.Popup:Init()
     if self.initialized then
         return
     end
     self.initialized = true
+
+    self:EnsureItemInfoListener()
 
     if _G.GearQuestSlotPopup then
         self.container = _G.GearQuestSlotPopup
@@ -202,15 +225,6 @@ function GQ.Popup:Init()
     self.activeSlotName = nil
     self.activeSlotButton = nil
     self.pendingItemIds = {}
-
-    local refreshFrame = CreateFrame("Frame")
-    refreshFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-    refreshFrame:SetScript("OnEvent", function()
-        local popup = _G.GearQuest and _G.GearQuest.Popup
-        if popup and popup.container and popup.container:IsShown() then
-            popup:RefreshIcons()
-        end
-    end)
 
     if CharacterFrame and CharacterFrame.HookScript and not CharacterFrame.GearQuestOnHideHooked then
         CharacterFrame.GearQuestOnHideHooked = true

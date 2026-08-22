@@ -49,7 +49,7 @@ function GQ.Compare:ScoreEntry(entry, equippedIlvl, slotName, maxPreferredIlvl)
 
     -- Simple relevance: prefer higher item level upgrades; slight bonus for quest/boss sources.
     local sourceBonus = 0
-    if entry.sourceType == "quest_reward" then
+    if entry.sourceType == "quest_reward" or entry.sourceType == "seasonal_quest" then
         sourceBonus = 2
     elseif entry.sourceType == "boss_drop" then
         sourceBonus = 1
@@ -96,6 +96,17 @@ function GQ.Compare:RankEntries(entries, slotName, maxResults)
     end
 
     table.sort(scored, function(a, b)
+        local rankA = a.entry.curatedRank
+        local rankB = b.entry.curatedRank
+        if rankA and rankB and rankA ~= rankB then
+            return rankA < rankB
+        end
+        if rankA and not rankB then
+            return true
+        end
+        if rankB and not rankA then
+            return false
+        end
         if a.score ~= b.score then
             return a.score > b.score
         end

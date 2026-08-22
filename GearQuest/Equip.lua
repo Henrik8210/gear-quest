@@ -59,6 +59,39 @@ function GQ.Equip:PrimeItem(itemId)
     end
 end
 
+function GQ.Equip:IsItemInfoLoaded(itemId)
+    if not itemId then
+        return false
+    end
+    self:PrimeItem(itemId)
+    local name = GetItemInfo(itemId)
+    return name ~= nil
+end
+
+function GQ.Equip:GetItemBindType(itemId)
+    if not itemId or not self:IsItemInfoLoaded(itemId) then
+        return nil
+    end
+
+    local bindType = select(14, GetItemInfo(itemId))
+    if bindType == nil and C_Item and C_Item.GetItemInfo then
+        local info = C_Item.GetItemInfo(itemId)
+        bindType = info and info.bindType
+    end
+
+    return bindType
+end
+
+function GQ.Equip:IsBindOnEquip(itemId)
+    local bindType = self:GetItemBindType(itemId)
+    if bindType == nil then
+        return nil
+    end
+
+    local bindOnEquip = (Enum and Enum.ItemBind and Enum.ItemBind.OnEquip) or 2
+    return bindType == bindOnEquip
+end
+
 function GQ.Equip:GetRequiredLevel(itemId)
     if not itemId then
         return 9999
@@ -162,6 +195,11 @@ function GQ.Equip:CanPlayerEquip(itemId, slotName)
     end
 
     self:PrimeItem(itemId)
+
+    -- Item data may not be cached yet; don't exclude curated entries until we know.
+    if not self:IsItemInfoLoaded(itemId) then
+        return true
+    end
 
     local playerLevel = GQ:GetEffectiveLevel()
     if self:GetRequiredLevel(itemId) > playerLevel then

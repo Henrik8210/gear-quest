@@ -370,10 +370,6 @@ function GQ:GetEffectiveClass()
     return self.Preview:GetEffectiveClass()
 end
 
-function GQ:GetEffectiveLevel()
-    return self.Preview:GetEffectiveLevel()
-end
-
 function GQ:GetEffectiveFaction()
     return self.Preview:GetEffectiveFaction()
 end

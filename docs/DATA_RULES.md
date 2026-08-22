@@ -1,185 +1,347 @@
-# GearQuest data rules
-
-Rules for adding, importing, and maintaining gear quest entries in `GearQuest/Data.lua`. Follow these when curating data from Wowhead, in-game research, or leveling guides.
-
-## Goal
-
-At any given level, show the **top 3 realistic upgrades per slot** for the player's **class, faction, and spec** — nothing they cannot equip, nothing far above their level.
-
----
-
-## 1. Source research (Wowhead and others)
-
-Before adding an entry, verify **all** of the following on the item's Wowhead (or in-game) page:
-
-| Check | Rule |
-|-------|------|
-| **Required level** | Must be ≤ the `maxLevel` band you assign. Never tag a level-19 item for a level-4 band. |
-| **Item ID** | Confirm on [Wowhead Classic](https://www.wowhead.com/classic) or classicdb.ch — wrong IDs silently show the wrong item in-game. |
-| **Class / armor type** | Confirm the class can wear it at that level (e.g. Paladins cannot use daggers; plate unlocks at 40). |
-| **Faction** | Set `factions = { Alliance = true }` or `{ Horde = true }` when the source is faction-locked. |
-| **Spec** (level 10+) | After talents unlock, note whether the item suits Holy / Protection / Retribution (etc.). Use optional `specs` on the entry when an item is spec-specific. |
-| **Slot** | Item equip slot must match the entry `slot` (MainHand, SecondaryHand, Chest, …). |
-| **Source type** | One of: `world_drop`, `boss_drop`, `quest_reward`, `vendor`, `profession`, `auction_house`. |
-| **Instructions** | 1–3 sentences: where to go, what to kill, which vendor, or how to craft — written for a player at that level. |
-
-### Check every source category
-
-When curating a level band, **search all obtainable categories** before moving on:
-
-| # | Source type | What to look for |
-|---|-------------|------------------|
-| 1 | **Vendor** | Starter-zone armorers, weapon smiths, and general goods sellers. |
-| 2 | **Quest reward** | Quests reachable at that level. Verify reward item IDs on Wowhead Classic (not wiki summaries alone). |
-| 3 | **World drop** | Grey and green BoE from zone mobs. |
-| 4 | **Boss drop** | Dungeon and world bosses reachable at that level. |
-| 5 | **Profession** | Crafted gear the class can wear at that level (Blacksmithing mail for paladins, Tailoring cloaks, etc.). |
-
-You do not need all five in every slot, but do not stop after vendors alone if another category has a valid item.
-
-For **profession** entries, also set optional `profession = "Blacksmithing"` (or Tailoring, Leatherworking, …) and mention the trainer, recipe, and where to craft in `instructions`.
-
-### Armor type (class best tier)
-
-Prefer the **highest armor tier the class can wear** at that level:
-
-| Class | Below 40 | Level 40+ |
-|-------|----------|-----------|
-| Paladin, Warrior | **Mail** | **Plate** |
-| Hunter, Shaman | **Leather** | **Mail** |
-| Druid, Rogue | **Leather** | **Leather** |
-| Priest, Mage, Warlock | **Cloth** | **Cloth** |
-
-**Data rule:** entries for a class/level band should use that class's best tier (mail for a level-4 paladin). Do not add cloth/leather filler unless the item is a genuine stat exception (see below).
-
-**Ranking rule:** `Compare.lua` heavily penalizes lower-tier armor in Head/Chest/Legs/Feet/Hands/Wrist/Waist/Shoulder slots. A cloth or leather piece only appears in the top 3 if its item level is **≥ 8 above** the best preferred-tier option for that slot — meaning it has unusually strong stats for the level/spec. Cloaks (`Back`) and non-armor slots are exempt.
-
-Prefer items that are **actually obtainable** at the target level (quest available, vendor visited, materials reachable, dungeon reachable), not theoretical end-of-band BiS from a generic list.
-
-### Wowhead TBC item search (research workflow)
-
-Use [Wowhead TBC items](https://www.wowhead.com/tbc/items) with filters, then narrow to what your class can **equip and obtain** at that level.
-
-**Example — Alliance Paladin main-hand weapons, req level 1–4:**
-
-```
-https://www.wowhead.com/tbc/items/min-req-level:1/max-req-level:4/side:1/class:2/slot:21:13:17
-```
-
-| Filter | Meaning |
-|--------|---------|
-| `min-req-level` / `max-req-level` | Item required level band |
-| `side:1` | Alliance |
-| `class:2` | Paladin (Wowhead class id) |
-| `slot:21:13:17` | Main Hand, One-Hand, Two-Hand |
-
-From the results:
-
-1. Drop items your class **cannot use** (daggers, axes/swords before skill training, etc.).
-2. Confirm **vendor NPC** and zone on the item page (Janos ≠ Corina Steele — check “Sold by”).
-3. For crafts, confirm **profession**, recipe source, and **required level** on the item tooltip.
-4. Match **item ID**, **name**, and **instructions** exactly in `Data.lua`.
-5. At level 4, Human Paladins start with **mace** skill only — swords need a weapon master first.
-
-Work **one slot per level band** (e.g. Main Hand at 4, Chest at 4, …) before expanding.
-
-Each slot should have **at least three entries** in `Data.lua` for that level band so the popup and log can always show three choices. Ranking picks the best three by score; they stay visible even if one is already equipped.
-
----
-
-## 2. Never import unusable items
-
-**Do not add** an entry if the character cannot equip the item:
-
-- Wrong weapon type (e.g. dagger, bow, wand for Paladin)
-- Armor tier not yet available (e.g. plate on a low-level Paladin before 40)
-- Required level above the entry's intended band
-- Wrong faction or class-only gear for other classes
-- Wrong item ID (always verify — many numeric IDs map to unrelated items)
-
-The addon validates at runtime with `IsEquippableItem` and required level from `GetItemInfo`. Bad data should still be caught in review using this checklist.
-
----
-
-## 3. Level bands and visibility
-
-Each entry has:
-
-```lua
-minLevel = 4,   -- first level this hunt is relevant
-maxLevel = 12,  -- last level it is normally shown
-```
-
-**While leveling:**
-
-- New entries appear when the player reaches `minLevel` and can equip the item (`required level ≤ player level`).
-- Entries **stop appearing** in the top-3 popup when the player is more than **5 levels above** `maxLevel` (`LEVEL_GRACE` in `Equip.lua`).
-- Between `maxLevel + 1` and `maxLevel + 5`, an entry may **remain** only if it still ranks in the **top 3** for that slot (still a meaningful upgrade).
-- Tracked/completed hunts follow the same level band rules in the log.
-
-**Ranking** uses item level vs equipped item level, class-appropriate armor tier (`Equip.lua` + `Compare.lua`), and small bonuses for quest/boss/vendor/profession sources — not full sims.
-
----
-
-## 4. Spec (talents, level 10+)
-
-- Below level 10: no spec filter; all class-valid entries compete.
-- Level 10+: prefer items that match the player's **active talent focus** (e.g. Retribution vs Holy for Paladin).
-- Optional entry field:
-
-```lua
-specs = { holy = true, retribution = true },  -- omit = all specs
-```
-
-Spec detection uses talent points when preview mode is off; preview mode may add a `spec` setting later.
-
----
-
-## 5. Entry template
-
-```lua
-{
-    id = "unique_snake_case_id",
-    itemId = 12345,
-    slot = "MainHand",
-    minLevel = 4,
-    maxLevel = 12,
-    classes = { PALADIN = true },           -- omit if any class can use
-    factions = { Alliance = true },         -- omit if both factions
-    specs = { retribution = true },         -- omit if not spec-specific
-    sourceType = "quest_reward",            -- or vendor, world_drop, boss_drop, profession, auction_house
-    profession = "Blacksmithing",           -- optional; use with sourceType = "profession"
-    instructions = "Short how-to for the player.",
-    zone = "Elwynn Forest",
-    npc = "Optional NPC name",
-    questId = 54,                           -- optional
-},
-```
-
----
-
-## 6. Review checklist (before commit)
-
-- [ ] Item ID opens the correct item in Wowhead Classic
-- [ ] In-game item name matches the entry instructions (same weapon/armor name throughout)
-- [ ] Required level fits the `minLevel`–`maxLevel` band
-- [ ] Class can equip weapon/armor type at that level
-- [ ] Armor entries use the class's best tier (mail for paladin/warrior below 40, etc.)
-- [ ] Checked vendor, quest, world drop, boss, and profession sources where items exist
-- [ ] Faction and spec filters are correct or omitted
-- [ ] Instructions match the source type and zone
-- [ ] Test in-game at `/gq preview set class paladin level N` (or on a real character) and confirm top 3 look sane
-
----
-
-## Related code
-
-| File | Role |
-|------|------|
-| `GearQuest/Data.lua` | Static entries |
-| `GearQuest/Equip.lua` | Equippability, required level, armor tier, spec, level grace |
-| `GearQuest/Compare.lua` | Top-3 ranking vs equipped item |
-| `GearQuest/Preview.lua` | Effective class / level / faction (and spec) |
-| `GearQuest/Core.lua` | Source type labels and colors |
-
-See also [PROJECT_BRIEF.md](./PROJECT_BRIEF.md).
+# GearQuest data rules
+
+Rules for adding, importing, and maintaining gear quest entries in `GearQuest/Data.lua`. Follow these when curating data from Wowhead, in-game research, or leveling guides.
+
+## Goal
+
+At any given level, show the **top 3 realistic upgrades per slot** for the player's **class, faction, and spec** — nothing they cannot equip, nothing far above their level.
+
+## Curation workflow (primary)
+
+**You** define the BiS list: top 3 items per slot per level band per class (and faction/spec when relevant). **GearQuest** adds them to `Data.lua`, verifies item IDs, and flags problems.
+
+When you send a batch, include for each item:
+
+| Field | Example |
+|-------|---------|
+| Class + level band | Alliance Paladin, level 4 |
+| Slot | Back |
+| Rank | 1, 2, or 3 |
+| Item | name + Wowhead/item ID |
+| Source | vendor / quest / seasonal quest / drop / profession / event |
+| How to get | 1–2 sentences |
+
+When curating level bands, set **`minLevel`** to the level that band starts (e.g. `1` for level 1–4, `5` for level 5–10). At each player level, GearQuest shows only entries from the **highest `minLevel` band** that the player has reached for that slot — so level 5 lists replace level 4 lists automatically.
+
+On import, the assistant will:
+
+1. **Verify** item ID, slot, required level, class/faction, and armor tier rules.
+2. **Compare** against existing entries for the same class + slot + level band — and warn if new gear is **worse** than something already indexed (lower item level, less armor on cloaks, grey vendor vs green stat item, wrong armor tier without a stat exception, etc.).
+3. **Warn** on duplicates, wrong IDs, or items that outrank existing #1–#3 without you intending a reshuffle.
+4. **Write** the entries with consistent `minLevel` / `maxLevel`, `sourceType`, and instructions.
+
+Optional: note if an item is **seasonal** (e.g. Midsummer crown) or **spec-specific** so we set `specs` or realistic `maxLevel` bands correctly.
+
+---
+
+## 1. Source research (Wowhead and others)
+
+Before adding an entry, verify **all** of the following on the item's Wowhead (or in-game) page:
+
+| Check | Rule |
+|-------|------|
+| **Required level** | Must be ≤ the `maxLevel` band you assign. Never tag a level-19 item for a level-4 band. |
+| **Item ID** | Confirm on [Wowhead Classic](https://www.wowhead.com/classic) or classicdb.ch — wrong IDs silently show the wrong item in-game. |
+| **Class / armor type** | Confirm the class can wear it at that level (e.g. Paladins cannot use daggers; plate unlocks at 40). |
+| **Faction** | Set `factions = { Alliance = true }` or `{ Horde = true }` when the source is faction-locked. |
+| **Spec** (level 10+) | After talents unlock, note whether the item suits Holy / Protection / Retribution (etc.). Use optional `specs` on the entry when an item is spec-specific. |
+| **Slot** | Item equip slot must match the entry `slot` (MainHand, SecondaryHand, Chest, …). |
+| **Source type** | One of: `world_drop`, `boss_drop`, `quest_reward`, `seasonal_quest`, `vendor`, `profession`, `auction_house`. |
+| **Instructions** | 1–3 sentences: where to go, what to kill, which vendor, or how to craft — written for a player at that level. |
+
+### Check every source category
+
+When curating a level band, **search all obtainable categories** before moving on:
+
+| # | Source type | What to look for |
+|---|-------------|------------------|
+| 1 | **Vendor** | Starter-zone armorers, weapon smiths, and general goods sellers. |
+| 2 | **Quest reward** | Quests reachable at that level. Verify reward item IDs on Wowhead Classic (not wiki summaries alone). |
+| 3 | **World drop** | Grey and green BoE from zone mobs. |
+| 4 | **Boss drop** | Dungeon and world bosses reachable at that level. |
+| 5 | **Profession** | Crafted gear the class can wear at that level (Blacksmithing mail for paladins, Tailoring cloaks, etc.). |
+
+You do not need all five in every slot, but do not stop after vendors alone if another category has a valid item.
+
+For **profession** entries, also set optional `profession = "Blacksmithing"` (or Tailoring, Leatherworking, …) and mention the trainer, recipe, and where to craft in `instructions`.
+
+### Armor type (class best tier)
+
+Prefer the **highest armor tier the class can wear** at that level:
+
+| Class | Below 40 | Level 40+ |
+|-------|----------|-----------|
+| Paladin, Warrior | **Mail** | **Plate** |
+| Hunter, Shaman | **Leather** | **Mail** |
+| Druid, Rogue | **Leather** | **Leather** |
+| Priest, Mage, Warlock | **Cloth** | **Cloth** |
+
+**Data rule:** entries for a class/level band should use that class's best tier (mail for a level-4 paladin). Do not add cloth/leather filler unless the item is a genuine stat exception (see below).
+
+**Ranking rule:** `Compare.lua` heavily penalizes lower-tier armor in Head/Chest/Legs/Feet/Hands/Wrist/Waist/Shoulder slots. A cloth or leather piece only appears in the top 3 if its item level is **≥ 8 above** the best preferred-tier option for that slot — meaning it has unusually strong stats for the level/spec. Cloaks (`Back`) and non-armor slots are exempt from armor-tier penalties (cloaks are always cloth).
+
+Prefer items that are **actually obtainable** at the target level (quest available, vendor visited, materials reachable, dungeon reachable), not theoretical end-of-band BiS from a generic list.
+
+### Class armor profiles (can wear vs should wear)
+
+Every class can **equip** any armor tier at any level (subject to required level). What matters for GearQuest is what they **should** hunt for at each level band.
+
+| Class | Can equip (always) | Preferred tier | Tier change |
+|-------|-------------------|----------------|-------------|
+| **Paladin** | Cloth, leather, mail, plate | Mail | Plate at **40** |
+| **Warrior** | Cloth, leather, mail, plate | Mail | Plate at **40** |
+| **Hunter** | Cloth, leather, mail | Leather | Mail at **40** |
+| **Shaman** | Cloth, leather, mail | Leather | Mail at **40** |
+| **Druid** | Cloth, leather | Leather | — |
+| **Rogue** | Cloth, leather | Leather | — |
+| **Priest, Mage, Warlock** | Cloth | Cloth | — |
+
+**Slots outside armor-subclass rules:** weapons, shields, cloaks (`Back`), neck, rings, trinkets. Cloaks are **always cloth** for every class — rank them by item level (higher ilvl ≈ more armor on cloaks at low levels), not by mail/leather/plate preference.
+
+**Import default:** for Head/Chest/Legs/Feet/Hands/Wrist/Waist/Shoulder, add the class's **preferred tier** for that level. Do not fill slots with lower-tier vendor greys when preferred-tier options exist at the same required level.
+
+### When lower-tier armor is still a valid upgrade
+
+The addon does not parse every stat line yet. It approximates “this green leather chest is worth wearing on a mail paladin” with an **item-level margin**: lower-tier armor is penalized unless its ilvl is **≥ 8 above** the best preferred-tier option in that slot (`Compare.lua`).
+
+When **curating** data by hand, use the item tooltip on Wowhead Classic and ask: *would a player realistically equip this over grey mail/leather at the same level?*
+
+| Situation | Include lower tier? | Example (verified on Wowhead Classic) |
+|-----------|---------------------|----------------------------------------|
+| Grey lower tier, no stats | **No** | White [Flimsy Chain Cloak (2652)](https://www.wowhead.com/classic/item/2652) — 5 armor, ilvl 5 — when [Battle Chain Cloak (4668)](https://www.wowhead.com/classic/item/4668) — 8 armor, ilvl 9, req 4 — exists |
+| Same preferred tier, but **+stats** | **Yes** (preferred tier) | [Copper Chain Vest (3471)](https://www.wowhead.com/classic/item/3471) — mail, **+1 Strength**, ilvl 10 — beats grey [Tarnished Chain Vest (2379)](https://www.wowhead.com/classic/item/2379) with no stats |
+| Green preferred tier with random stats | **Yes** | Green [Loose Chain Cloak (2644)](https://www.wowhead.com/classic/item/2644) uncommon drops can roll stats; still below the ilvl-9 / 8-armor cloak band at req 4 |
+| Green **lower** tier with strong stat budget | **Rare — check ilvl + stats** | [Deviate Scale Belt (6468)](https://www.wowhead.com/classic/item/6468) — **leather**, +6 Sta / +5 Agi / +3 Spi, ilvl 23 — clearly beats grey mail belts for **Hunter** (preferred leather). A **Paladin** would only hunt leather if it massively outclasses mail (high ilvl + combat stats for Retribution, or +Int/+Spi for Holy) |
+| Situational resist / spell gear | **Yes, spec-specific** | Use `specs = { holy = true }` when the item is cloth with +Int/+Spi and ilvl justifies it for healing |
+
+**Why leather can beat mail (concept):** armor subclass gives more base armor per ilvl on higher tiers, but **green and blue items spend part of their budget on primary stats** (+Strength, +Stamina, +Agility, +Intellect, +Spirit). A white mail piece with armor only often loses to a green leather piece with several stat lines — especially for DPS specs. GearQuest's +8 ilvl margin is a stand-in until full stat weighting exists; when importing, prefer Wowhead stat blocks over name or grey quality alone.
+
+**Back slot example (level 4 Alliance Paladin):** Wowhead TBC filter [`slot:16`, req 1–4](https://www.wowhead.com/tbc/items/min-req-level:1/max-req-level:4/side:1/class:2/slot:16) lists **8-armor** green cloaks at req 4 (Battle Chain, Ancestral, Tribal). A crafted [Linen Cloak (2570)](https://www.wowhead.com/classic/item/2570) only has **6 armor** (ilvl 6) — fine as a profession fallback, not as the top recommendation once the player hits level 4.
+
+### Wowhead TBC item search (research workflow)
+
+Use [Wowhead TBC items](https://www.wowhead.com/tbc/items) with filters, then narrow to what your class can **equip and obtain** at that level.
+
+**Example — Alliance Paladin main-hand weapons, req level 1–4:**
+
+```
+https://www.wowhead.com/tbc/items/min-req-level:1/max-req-level:4/side:1/class:2/slot:21:13:17
+```
+
+| Filter | Meaning |
+|--------|---------|
+| `min-req-level` / `max-req-level` | Item required level band |
+| `side:1` | Alliance |
+| `class:2` | Paladin (Wowhead class id) |
+| `slot:21:13:17` | Main Hand, One-Hand, Two-Hand |
+
+From the results:
+
+1. Drop items your class **cannot use** (daggers, axes/swords before skill training, etc.).
+2. Confirm **vendor NPC** and zone on the item page (Janos ≠ Corina Steele — check “Sold by”).
+3. For crafts, confirm **profession**, recipe source, and **required level** on the item tooltip.
+4. Match **item ID**, **name**, and **instructions** exactly in `Data.lua`.
+5. At level 4, Human Paladins start with **mace** skill only — swords need a weapon master first.
+
+Work **one slot per level band** (e.g. Main Hand at 4, Chest at 4, …) before expanding.
+
+**Example — Alliance Paladin cloaks, req level 1–4:**
+
+```
+https://www.wowhead.com/tbc/items/min-req-level:1/max-req-level:4/side:1/class:2/slot:16
+```
+
+At req 4, prefer the **8-armor** green world drops (item level 9) over grey 5–6 armor cloaks or the 6-armor Linen Cloak craft.
+
+Each slot should have **at least three entries** in `Data.lua` for that level band so the popup and log can always show three choices. Ranking picks the best three by score; they stay visible even if one is already equipped.
+
+---
+
+## 2. Never import unusable items
+
+**Do not add** an entry if the character cannot equip the item:
+
+- Wrong weapon type (e.g. dagger, bow, wand for Paladin)
+- Armor tier not yet available (e.g. plate on a low-level Paladin before 40)
+- Required level above the entry's intended band
+- Wrong faction or class-only gear for other classes
+- Wrong item ID (always verify — many numeric IDs map to unrelated items)
+
+The addon validates at runtime with `IsEquippableItem` and required level from `GetItemInfo`. Bad data should still be caught in review using this checklist.
+
+---
+
+## 3. Level bands and visibility
+
+Each entry has:
+
+```lua
+minLevel = 4,   -- first level this hunt is relevant
+maxLevel = 12,  -- last level it is normally shown
+```
+
+**While leveling:**
+
+- New entries appear when the player reaches `minLevel` and can equip the item (`required level ≤ player level`).
+- Entries **stop appearing** in the top-3 popup when the player is more than **5 levels above** `maxLevel` (`LEVEL_GRACE` in `Equip.lua`).
+- Between `maxLevel + 1` and `maxLevel + 5`, an entry may **remain** only if it still ranks in the **top 3** for that slot (still a meaningful upgrade).
+- Tracked/completed hunts follow the same level band rules in the log.
+
+**Ranking** uses item level vs equipped item level, class-appropriate armor tier (`Equip.lua` + `Compare.lua`), and small bonuses for quest/boss/vendor/profession sources — not full sims.
+
+---
+
+## 4. Spec (talents, level 10+)
+
+- Below level 10: no spec filter; all class-valid entries compete.
+- Level 10+: prefer items that match the player's **active talent focus** (e.g. Retribution vs Holy for Paladin).
+- Optional entry field:
+
+```lua
+specs = { holy = true, retribution = true },  -- omit = all specs
+```
+
+Spec detection uses talent points when preview mode is off; preview mode may add a `spec` setting later.
+
+---
+
+## 5. Entry template
+
+```lua
+{
+    id = "unique_snake_case_id",
+    itemId = 12345,
+    slot = "MainHand",
+    minLevel = 4,
+    maxLevel = 12,
+    classes = { PALADIN = true },           -- omit if any class can use
+    factions = { Alliance = true },         -- omit if both factions
+    specs = { retribution = true },         -- omit if not spec-specific
+    sourceType = "quest_reward",            -- or vendor, world_drop, boss_drop, seasonal_quest, profession, auction_house
+    curatedRank = 1,                        -- optional; 1 = best in slot for this band (preserves your order)
+    profession = "Blacksmithing",           -- optional; use with sourceType = "profession"
+    instructions = "Short how-to for the player.",
+    zone = "Elwynn Forest",
+    npc = "Optional NPC name",
+    questName = "Optional quest name",          -- use the in-game quest title, never quest ID in the log
+},
+```
+
+---
+
+## 6. Review checklist (before commit)
+
+- [ ] Item ID opens the correct item in Wowhead Classic
+- [ ] In-game item name matches the entry instructions (same weapon/armor name throughout)
+- [ ] Required level fits the `minLevel`–`maxLevel` band
+- [ ] Class can equip weapon/armor type at that level
+- [ ] Armor entries use the class's best tier (mail for paladin/warrior below 40, etc.)
+- [ ] Lower-tier armor included only with a genuine stat/ilvl reason (see Class armor profiles)
+- [ ] Back slot: highest armor / ilvl at that req level (cloaks are always cloth)
+- [ ] Checked vendor, quest, world drop, boss, and profession sources where items exist
+- [ ] Faction and spec filters are correct or omitted
+- [ ] Instructions match the source type and zone
+- [ ] Test in-game at `/gq preview set class paladin level N` (or on a real character) and confirm top 3 look sane
+
+---
+
+## Related code
+
+| File | Role |
+|------|------|
+| `GearQuest/Data.lua` | Static entries |
+| `GearQuest/Equip.lua` | Equippability, required level, armor tier, spec, level grace |
+| `GearQuest/Compare.lua` | Top-3 ranking vs equipped item |
+| `GearQuest/Preview.lua` | Effective class / level / faction (and spec) |
+| `GearQuest/Core.lua` | Source type labels and colors |
+
+See also [PROJECT_BRIEF.md](./PROJECT_BRIEF.md).
+
+---
+
+## 7. UI behavior authors should know (log, tracker, popup)
+
+When adding quests, these player-facing rules explain **what shows up where** and **how labels behave**. Use them so new data matches what players see in-game.
+
+### Level bands in the log vs tracked hunts
+
+| Behavior | Rule |
+|----------|------|
+| **Active band** | At player level N, the log and popup only rank entries whose `minLevel` equals the **highest band reached** (`FilterToActiveBand` in `Data.lua`). Level 6 entries replace level 5 entries once the player hits 6. |
+| **"New" label** | On the **Active** tab, items from the current band show a gold **New** tag after the item name. Older-band items still visible (e.g. a tracked level-5 hunt after leveling to 6) do **not** get **New**. |
+| **Tracked persistence** | A tracked hunt stays on the **Active** tab even if it falls out of the top 3 after leveling, as long as class/faction still match. It is appended below the current top 3 for that slot. |
+| **Untrack** | Untracking normally keeps the detail panel open on the same item. If the hunt would **vanish from the log** (tracked but not in current top 3), the player gets a confirmation: *"It will become unavailable once you do"*. |
+
+### Popup (right-click character slot)
+
+- Every slot in `PaperDoll.lua` `SUPPORTED_SLOTS` must be wired, or right-click does nothing — include **Neck**, **Head**, **Shoulder**, etc.
+- If there are no upgrades for a slot at the current level, print: `No upgrade hunts found for <Slot>.` (same as shoulder with no entries).
+- Popup shows top **3** from the **active band only** (`GetCandidatesForSlot` → `FilterToActiveBand`).
+
+### Detail panel (parchment)
+
+| Field | Display rule |
+|-------|----------------|
+| Item title | Item name (uppercase), not quest ID |
+| Description | `instructions` + zone / quest / **NPC:** / source |
+| **REWARD** | Always show reward block: item icon + dark name strip; hover = item tooltip; Shift+click = chat link |
+| BoE world drops | Detail text may note Auction House when bind-on-equip |
+| Fonts | Use vanilla quest-log fonts (`QuestFont`, `QuestFont_Large`). Do **not** add outline/heavy post-processing on parchment body text. |
+
+### List row labels
+
+Example at level 6 with a tracked level-5 item still showing:
+
+```
+Charger's Armor New          ← current band, not tracked
+Warrior's Tunic (Tracked)    ← older band, still tracked
+```
+
+Order within a slot: top 3 by `curatedRank` / score first, then extra tracked hunts.
+
+### Floating tracker
+
+- Shows all **tracked** hunts (not completed).
+- Description length scales with tracker width (10–30 words).
+- No chat message on Track/Untrack (keep chat quiet).
+- Tracker is resizable; position and size persist in `GearQuestDB.settings`.
+
+### Slots often skipped at low levels
+
+Document in the batch when a slot has **no entries** on purpose:
+
+| Slot | Typical low-level rule |
+|------|------------------------|
+| **Shoulder** | Skip in level 4–6 bands — no meaningful shoulder upgrades at those levels. |
+| **Neck** | Add when valid neck items exist for the band; otherwise popup correctly reports no hunts. |
+
+When adding a new band (e.g. `early6_*`), copy the slot coverage pattern from the previous band and adjust — do not assume shoulder/neck carry over.
+
+### Level 6 band constants (example)
+
+```lua
+local LEVEL6_MIN = 6
+local LEVEL6_MAX = 12
+```
+
+Use `id` prefix `early6_<slot>_<snake_name>`. Order legs (and similar) by **real stat value**, not alphabetically — set `curatedRank = 1` for the best piece in that slot/band.
+
+### Copy & instructions checklist (player-facing)
+
+- [ ] `questName` = in-game quest title (never show quest ID in UI)
+- [ ] `npc` = vendor/quest giver name (log shows **NPC:** label)
+- [ ] `instructions` = 1–3 sentences a level-N player can follow immediately
+- [ ] Each slot in the band has up to **3** ranked entries (`curatedRank` 1 = best) where items exist
+- [ ] Verify right-click popup and log **Active** tab both show the new band after `/gq preview set level N`
+- [ ] Confirm **New** appears on band entries and disappears on older tracked hunts for the same slot
+
+### Related UI code (2026-03)
+
+| File | Role |
+|------|------|
+| `GearQuest/Log.lua` | Quest log, Active/Completed tabs, reward row, **New** label, untrack confirm |
+| `GearQuest/Tracker.lua` | Floating tracked-hunt panel |
+| `GearQuest/Popup.lua` | Character-slot upgrade bar |
+| `GearQuest/PaperDoll.lua` | Right-click slot hooks (`SUPPORTED_SLOTS`) |
+| `GearQuest/Indicator.lua` | Green ↑ on BiS items in loot/quest UI |
+| `GearQuest/Data.lua` | `GetActiveBandMinLevel`, `IsEntryNewForPlayer` |

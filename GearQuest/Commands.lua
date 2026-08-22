@@ -42,6 +42,7 @@ function GQ.Commands:Init()
             GQ.Log:Toggle()
         elseif IsPreviewCommand(lower) then
             GQ.Preview:HandleCommand(lower)
+            GQ:RefreshUI()
         elseif lower == "log" then
             GQ.Log:Toggle()
         elseif lower == "track" then
@@ -52,7 +53,7 @@ function GQ.Commands:Init()
             end
         elseif lower == "untrack" then
             if GQ.Log.selectedHuntId then
-                GQ.Log:UntrackHunt(GQ.Log.selectedHuntId)
+                GQ.Log:RequestUntrackHunt(GQ.Log.selectedHuntId)
             else
                 print("|cff66ccffGearQuest|r: No upgrade selected.")
             end

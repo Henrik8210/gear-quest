@@ -1,0 +1,947 @@
+local _, GQ = ...
+
+GQ.Tracker = GQ.Tracker or {}
+
+local MIN_WIDTH = 100
+local MIN_HEIGHT = 100
+local MAX_WIDTH = 400
+local MAX_HEIGHT = 1000
+local DEFAULT_WIDTH = 100
+local MIN_DESC_WORDS = 10
+local MAX_DESC_WORDS = 30
+local TITLE_TEXT = "GearQuest Tracker"
+local TITLE_COLOR = { 1, 0.82, 0 }
+local ENTRY_NAME_COLOR = { 1, 1, 1 }
+local ENTRY_DESC_COLOR = { 1, 1, 1, 0.72 }
+local ENTRY_GAP = 6
+local TITLE_GAP = 10
+local RESIZE_GRIP = 14
+local RESIZE_BORDER_THICKNESS = 2
+local RESIZE_BORDER_COLOR = { 1, 1, 1, 0.6 }
+local SCROLLBAR_WIDTH = 4
+local SCROLLBAR_PAD = 2
+local SCROLLBAR_HIDE_DELAY = 1.2
+local SCROLLBAR_MIN_THUMB = 18
+local SCROLL_STEP = 24
+local ROW_TOOLTIP_STILL_DELAY = 3
+local ROW_TOOLTIP_MOVE_THRESHOLD = 1
+
+local function NormalizeHuntStatus(status)
+    if status == "active" then
+        return "tracked"
+    end
+    return status
+end
+
+local function ClampSize(width, height)
+    return
+        math.min(MAX_WIDTH, math.max(MIN_WIDTH, width or DEFAULT_WIDTH)),
+        math.min(MAX_HEIGHT, math.max(MIN_HEIGHT, height or MIN_HEIGHT))
+end
+
+local function GetDescWordLimit(width)
+    width = math.min(MAX_WIDTH, math.max(MIN_WIDTH, width or DEFAULT_WIDTH))
+    local ratio = (width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH)
+    return math.floor(MIN_DESC_WORDS + ratio * (MAX_DESC_WORDS - MIN_DESC_WORDS) + 0.5)
+end
+
+local function FirstWords(text, maxWords)
+    if not text or text == "" then
+        return ""
+    end
+
+    text = text:gsub("\n+", " ")
+    local words = {}
+    local truncated = false
+    for word in text:gmatch("%S+") do
+        if #words >= maxWords then
+            truncated = true
+            break
+        end
+        words[#words + 1] = word
+    end
+
+    local result = table.concat(words, " ")
+    if truncated then
+        return result .. "..."
+    end
+    return result
+end
+
+local function CreateFontString(parent, font)
+    local ok, fs = pcall(parent.CreateFontString, parent, nil, "ARTWORK", font)
+    if ok and fs then
+        return fs
+    end
+    return parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+end
+
+local function CreateFontStringWithFallback(parent, candidates)
+    for _, font in ipairs(candidates) do
+        local ok, fs = pcall(parent.CreateFontString, parent, nil, "ARTWORK", font)
+        if ok and fs then
+            return fs
+        end
+    end
+    return parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+end
+
+local function CreateEdgeTexture(border)
+    local tex = border:CreateTexture(nil, "OVERLAY", nil, 7)
+    tex:SetColorTexture(RESIZE_BORDER_COLOR[1], RESIZE_BORDER_COLOR[2], RESIZE_BORDER_COLOR[3], RESIZE_BORDER_COLOR[4])
+    return tex
+end
+
+local function CreateResizeBorder(parent)
+    local border = CreateFrame("Frame", nil, parent)
+    border:SetAllPoints(parent)
+    border:SetFrameStrata("TOOLTIP")
+    border:SetFrameLevel(100)
+    border:EnableMouse(false)
+    border:Hide()
+
+    local top = CreateEdgeTexture(border)
+    top:SetHeight(RESIZE_BORDER_THICKNESS)
+    top:SetPoint("TOPLEFT", border, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", border, "TOPRIGHT", 0, 0)
+
+    local bottom = CreateEdgeTexture(border)
+    bottom:SetHeight(RESIZE_BORDER_THICKNESS)
+    bottom:SetPoint("BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
+
+    local left = CreateEdgeTexture(border)
+    left:SetWidth(RESIZE_BORDER_THICKNESS)
+    left:SetPoint("TOPLEFT", border, "TOPLEFT", 0, 0)
+    left:SetPoint("BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0)
+
+    local right = CreateEdgeTexture(border)
+    right:SetWidth(RESIZE_BORDER_THICKNESS)
+    right:SetPoint("TOPRIGHT", border, "TOPRIGHT", 0, 0)
+    right:SetPoint("BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
+
+    return border
+end
+
+function GQ.Tracker:GetTrackedEntries()
+    local results = {}
+
+    for id, record in pairs(GearQuestDB.hunts or {}) do
+        if NormalizeHuntStatus(record.status) == "tracked" then
+            local entry = GQ.Data:GetEntryById(id)
+            if entry then
+                results[#results + 1] = {
+                    entry = entry,
+                    trackedAt = record.trackedAt or 0,
+                }
+            end
+        end
+    end
+
+    table.sort(results, function(a, b)
+        if a.trackedAt ~= b.trackedAt then
+            return a.trackedAt < b.trackedAt
+        end
+        return a.entry.id < b.entry.id
+    end)
+
+    local entries = {}
+    for _, row in ipairs(results) do
+        entries[#entries + 1] = row.entry
+    end
+
+    return entries
+end
+
+function GQ.Tracker:GetSavedSize()
+    GearQuestDB.settings = GearQuestDB.settings or {}
+    local size = GearQuestDB.settings.trackerSize or {}
+    return ClampSize(size.width or DEFAULT_WIDTH, size.height or 160)
+end
+
+function GQ.Tracker:SaveSize(width, height)
+    GearQuestDB.settings = GearQuestDB.settings or {}
+    width, height = ClampSize(width, height)
+    GearQuestDB.settings.trackerSize = {
+        width = width,
+        height = height,
+    }
+end
+
+function GQ.Tracker:SavePosition()
+    if not self.frame then
+        return
+    end
+
+    GearQuestDB.settings = GearQuestDB.settings or {}
+    local point, _, relPoint, x, y = self.frame:GetPoint(1)
+    GearQuestDB.settings.trackerPos = {
+        point = point,
+        relPoint = relPoint,
+        x = x,
+        y = y,
+    }
+end
+
+function GQ.Tracker:RestorePosition()
+    if not self.frame then
+        return
+    end
+
+    local pos = GearQuestDB.settings and GearQuestDB.settings.trackerPos
+    self.frame:ClearAllPoints()
+    if pos and pos.point then
+        self.frame:SetPoint(pos.point, UIParent, pos.relPoint or pos.point, pos.x or 0, pos.y or 0)
+    else
+        self.frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -40, -120)
+    end
+end
+
+function GQ.Tracker:SetFrameSize(width, height)
+    if not self.frame then
+        return
+    end
+
+    width, height = ClampSize(width, height)
+    local top = self.frame:GetTop()
+    local left = self.frame:GetLeft()
+
+    self.frame:SetSize(width, height)
+
+    if top and left then
+        self.frame:ClearAllPoints()
+        self.frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    end
+
+    return width, height
+end
+
+function GQ.Tracker:GetScrollGutter()
+    return SCROLLBAR_WIDTH + SCROLLBAR_PAD
+end
+
+function GQ.Tracker:ApplyFrameWidth(width)
+    width = math.min(MAX_WIDTH, math.max(MIN_WIDTH, width or DEFAULT_WIDTH))
+
+    if self.title then
+        self.title:SetWidth(width)
+    end
+    if self.scroll then
+        self.scroll:SetWidth(width)
+    end
+
+    return width
+end
+
+function GQ.Tracker:ApplyTextWidth(textWidth)
+    textWidth = math.max(MIN_WIDTH - self:GetScrollGutter(), textWidth or DEFAULT_WIDTH)
+
+    if self.contentInner then
+        self.contentInner:SetWidth(textWidth)
+    end
+    if self.entryRows then
+        for _, row in ipairs(self.entryRows) do
+            row:SetWidth(textWidth)
+            if row.name then
+                row.name:SetWidth(textWidth)
+            end
+            if row.desc then
+                row.desc:SetWidth(textWidth)
+            end
+        end
+    end
+
+    return textWidth
+end
+
+function GQ.Tracker:LayoutEntries(entries, descWordLimit)
+    local yOffset = 0
+
+    for i, entry in ipairs(entries) do
+        local row = self.entryRows[i]
+        local itemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
+        local desc = FirstWords(entry.instructions, descWordLimit)
+
+        row.name:SetText(itemName)
+        row.desc:SetText(desc)
+        row.entryId = entry.id
+        row.name:SetTextColor(ENTRY_NAME_COLOR[1], ENTRY_NAME_COLOR[2], ENTRY_NAME_COLOR[3])
+        row.desc:SetTextColor(ENTRY_DESC_COLOR[1], ENTRY_DESC_COLOR[2], ENTRY_DESC_COLOR[3], ENTRY_DESC_COLOR[4])
+
+        local nameHeight = row.name:GetStringHeight() or 12
+        local descHeight = row.desc:GetStringHeight() or 0
+        local rowHeight = nameHeight + 2 + descHeight
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", self.contentInner, "TOPLEFT", 0, -yOffset)
+        row:SetHeight(rowHeight)
+
+        yOffset = yOffset + rowHeight + ENTRY_GAP
+    end
+
+    return yOffset
+end
+
+function GQ.Tracker:ApplyWidth(width)
+    return self:ApplyFrameWidth(width)
+end
+
+function GQ.Tracker:IsMouseOverFrame(frame)
+    if not frame then
+        return false
+    end
+    if frame.IsMouseOver then
+        return frame:IsMouseOver()
+    end
+    return MouseIsOver(frame)
+end
+
+function GQ.Tracker:EnsureRowTooltipTicker()
+    if self.rowTooltipTicker then
+        return
+    end
+
+    local ticker = CreateFrame("Frame")
+    ticker:Hide()
+    ticker:SetScript("OnUpdate", function()
+        GQ.Tracker:UpdateRowTooltipWatch()
+    end)
+    self.rowTooltipTicker = ticker
+end
+
+function GQ.Tracker:BeginRowTooltipWatch(row)
+    if not row or not row.entryId then
+        return
+    end
+
+    self:CancelRowTooltipWatch(row, true)
+    self:EnsureRowTooltipTicker()
+
+    row.gqTooltipStillSince = nil
+    row.gqTooltipLastX = nil
+    row.gqTooltipLastY = nil
+    row.gqTooltipShown = false
+
+    self.rowTooltipRow = row
+    self.rowTooltipTicker:Show()
+end
+
+function GQ.Tracker:CancelRowTooltipWatch(row, keepTooltip)
+    if row then
+        row.gqTooltipStillSince = nil
+        row.gqTooltipLastX = nil
+        row.gqTooltipLastY = nil
+        row.gqTooltipShown = false
+    end
+
+    if self.rowTooltipRow == row then
+        self.rowTooltipRow = nil
+        if self.rowTooltipTicker then
+            self.rowTooltipTicker:Hide()
+        end
+    end
+
+    if not keepTooltip then
+        GameTooltip:Hide()
+    end
+end
+
+function GQ.Tracker:UpdateRowTooltipWatch()
+    local row = self.rowTooltipRow
+    if not row or not row.entryId then
+        if self.rowTooltipTicker then
+            self.rowTooltipTicker:Hide()
+        end
+        return
+    end
+
+    if not self:IsMouseOverFrame(row) then
+        self:CancelRowTooltipWatch(row)
+        return
+    end
+
+    local scale = row:GetEffectiveScale()
+    local cursorX, cursorY = GetCursorPosition()
+    cursorX = cursorX / scale
+    cursorY = cursorY / scale
+
+    local lastX = row.gqTooltipLastX
+    local lastY = row.gqTooltipLastY
+    if lastX and (math.abs(cursorX - lastX) > ROW_TOOLTIP_MOVE_THRESHOLD or math.abs(cursorY - lastY) > ROW_TOOLTIP_MOVE_THRESHOLD) then
+        row.gqTooltipStillSince = GetTime()
+        row.gqTooltipLastX = cursorX
+        row.gqTooltipLastY = cursorY
+        row.gqTooltipShown = false
+        GameTooltip:Hide()
+        return
+    end
+
+    if not row.gqTooltipStillSince then
+        row.gqTooltipStillSince = GetTime()
+        row.gqTooltipLastX = cursorX
+        row.gqTooltipLastY = cursorY
+        return
+    end
+
+    if row.gqTooltipShown then
+        return
+    end
+
+    if GetTime() - row.gqTooltipStillSince >= ROW_TOOLTIP_STILL_DELAY then
+        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Click to open in GearQuest Log", 1, 1, 1)
+        GameTooltip:Show()
+        row.gqTooltipShown = true
+    end
+end
+
+function GQ.Tracker:EnsureEntryRows(count)
+    local width = select(1, self:GetSavedSize())
+    width = self:ApplyFrameWidth(width)
+    self:ApplyTextWidth(width)
+    self.entryRows = self.entryRows or {}
+
+    while #self.entryRows < count do
+        local index = #self.entryRows + 1
+        local row = CreateFrame("Button", nil, self.contentInner)
+        row:SetWidth(width)
+        row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight")
+        if row.GetHighlightTexture then
+            local highlight = row:GetHighlightTexture()
+            if highlight and highlight.SetAlpha then
+                highlight:SetAlpha(0.35)
+            end
+        end
+        row:RegisterForClicks("LeftButtonUp")
+
+        row.name = CreateFontString(row, "GameFontNormal")
+        row.name:SetWidth(width)
+        row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+        row.name:SetJustifyH("LEFT")
+        row.name:SetWordWrap(true)
+        row.name:SetTextColor(ENTRY_NAME_COLOR[1], ENTRY_NAME_COLOR[2], ENTRY_NAME_COLOR[3])
+
+        row.desc = CreateFontString(row, "GameFontNormal")
+        row.desc:SetWidth(width)
+        row.desc:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
+        row.desc:SetJustifyH("LEFT")
+        row.desc:SetWordWrap(true)
+        row.desc:SetTextColor(ENTRY_DESC_COLOR[1], ENTRY_DESC_COLOR[2], ENTRY_DESC_COLOR[3], ENTRY_DESC_COLOR[4])
+
+        row:SetScript("OnClick", function(self)
+            if self.entryId and GQ.Tracker then
+                GQ.Tracker:CancelRowTooltipWatch(self)
+                GQ.Tracker:OpenHunt(self.entryId)
+            end
+        end)
+
+        row:SetScript("OnEnter", function(self)
+            if self.entryId and GQ.Tracker then
+                GQ.Tracker:BeginRowTooltipWatch(self)
+            end
+        end)
+
+        row:SetScript("OnLeave", function(self)
+            if GQ.Tracker then
+                GQ.Tracker:CancelRowTooltipWatch(self)
+            end
+        end)
+
+        self.entryRows[index] = row
+    end
+
+    for i = 1, #self.entryRows do
+        if i <= count then
+            self.entryRows[i]:Show()
+        else
+            self.entryRows[i]:Hide()
+        end
+    end
+end
+
+function GQ.Tracker:GetMaxScroll()
+    if not self.scroll or not self.contentInner then
+        return 0
+    end
+
+    local scrollHeight = self.scroll:GetHeight() or 0
+    local contentHeight = self.contentInner:GetHeight() or 0
+    return math.max(0, contentHeight - scrollHeight)
+end
+
+function GQ.Tracker:HideScrollBar()
+    if self.scrollBarHideTimer then
+        self.scrollBarHideTimer:Cancel()
+        self.scrollBarHideTimer = nil
+    end
+
+    self.scrollBarHideAt = nil
+
+    if self.scrollBar then
+        self.scrollBar:Hide()
+        self.scrollBar:SetAlpha(0)
+    end
+end
+
+function GQ.Tracker:ScheduleScrollBarHide()
+    if self.scrollBarHideTimer then
+        self.scrollBarHideTimer:Cancel()
+        self.scrollBarHideTimer = nil
+    end
+
+    if C_Timer and C_Timer.NewTimer then
+        self.scrollBarHideTimer = C_Timer.NewTimer(SCROLLBAR_HIDE_DELAY, function()
+            if GQ.Tracker and not GQ.Tracker.scrollBarDragging then
+                GQ.Tracker:HideScrollBar()
+            end
+        end)
+        return
+    end
+
+    self.scrollBarHideAt = GetTime() + SCROLLBAR_HIDE_DELAY
+    self:EnsureScrollBarHideTicker()
+end
+
+function GQ.Tracker:ShowScrollBarTemporary()
+    if not self.scrollBar or self:GetMaxScroll() <= 0 then
+        self:HideScrollBar()
+        return
+    end
+
+    self.scrollBar:Show()
+    self.scrollBar:SetAlpha(1)
+    self:ScheduleScrollBarHide()
+end
+
+function GQ.Tracker:SetScrollOffset(offset)
+    if not self.scroll then
+        return
+    end
+
+    local maxScroll = self:GetMaxScroll()
+    offset = math.max(0, math.min(maxScroll, offset or 0))
+    self.scroll:SetVerticalScroll(offset)
+    self:UpdateScrollBar()
+end
+
+function GQ.Tracker:ScrollBy(delta)
+    if not self.scroll or delta == 0 then
+        return
+    end
+
+    local maxScroll = self:GetMaxScroll()
+    if maxScroll <= 0 then
+        return
+    end
+
+    local current = self.scroll:GetVerticalScroll() or 0
+    self:SetScrollOffset(current - (delta * SCROLL_STEP))
+    self:ShowScrollBarTemporary()
+end
+
+function GQ.Tracker:UpdateScrollBar()
+    if not self.scroll or not self.scrollBar or not self.scrollThumb then
+        return
+    end
+
+    local maxScroll = self:GetMaxScroll()
+    if maxScroll <= 0 then
+        self:HideScrollBar()
+        self.scroll:SetVerticalScroll(0)
+        return
+    end
+
+    local scrollPos = self.scroll:GetVerticalScroll() or 0
+    local trackHeight = self.scrollBar:GetHeight() or 1
+    local scrollHeight = self.scroll:GetHeight() or 1
+    local contentHeight = self.contentInner:GetHeight() or 1
+    local thumbHeight = math.max(SCROLLBAR_MIN_THUMB, trackHeight * (scrollHeight / contentHeight))
+    local thumbTravel = math.max(0, trackHeight - thumbHeight)
+    local thumbOffset = maxScroll > 0 and (scrollPos / maxScroll) * thumbTravel or 0
+
+    self.scrollThumb:SetHeight(thumbHeight)
+    self.scrollThumb:ClearAllPoints()
+    self.scrollThumb:SetPoint("TOP", self.scrollBar, "TOP", 0, -thumbOffset)
+end
+
+function GQ.Tracker:BeginThumbDrag()
+    if not self.scrollBar or not self.scrollThumb or not self.scroll then
+        return
+    end
+
+    self.scrollBarDragging = true
+    self:ShowScrollBarTemporary()
+
+    local scale = self.scrollBar:GetEffectiveScale()
+    local _, cursorY = GetCursorPosition()
+    cursorY = cursorY / scale
+    local thumbTop = self.scrollThumb:GetTop() or cursorY
+    self.thumbDragOffset = cursorY - thumbTop
+
+    self.scrollBar:SetScript("OnUpdate", function()
+        local tracker = GQ.Tracker
+        if not tracker.scrollBarDragging or not tracker.scrollBar or not tracker.scrollThumb then
+            return
+        end
+
+        if not IsMouseButtonDown("LeftButton") then
+            tracker:StopThumbDrag()
+            return
+        end
+
+        local barScale = tracker.scrollBar:GetEffectiveScale()
+        local _, y = GetCursorPosition()
+        y = y / barScale
+
+        local barTop = tracker.scrollBar:GetTop() or y
+        local trackHeight = tracker.scrollBar:GetHeight() or 1
+        local scrollHeight = tracker.scroll:GetHeight() or 1
+        local contentHeight = tracker.contentInner:GetHeight() or 1
+        local thumbHeight = math.max(SCROLLBAR_MIN_THUMB, trackHeight * (scrollHeight / contentHeight))
+        local thumbTravel = math.max(0, trackHeight - thumbHeight)
+        local thumbTop = y - (tracker.thumbDragOffset or 0)
+        local thumbOffset = barTop - thumbTop
+        thumbOffset = math.max(0, math.min(thumbTravel, thumbOffset))
+
+        local maxScroll = tracker:GetMaxScroll()
+        local scrollPos = thumbTravel > 0 and (thumbOffset / thumbTravel) * maxScroll or 0
+        tracker:SetScrollOffset(scrollPos)
+        tracker:ShowScrollBarTemporary()
+    end)
+end
+
+function GQ.Tracker:StopThumbDrag()
+    self.scrollBarDragging = false
+    self.thumbDragOffset = nil
+
+    if self.scrollBar then
+        self.scrollBar:SetScript("OnUpdate", nil)
+    end
+
+    self:ScheduleScrollBarHide()
+end
+
+function GQ.Tracker:EnsureScrollBarHideTicker()
+    if self.scrollBarHideTicker or (C_Timer and C_Timer.NewTimer) then
+        return
+    end
+
+    local ticker = CreateFrame("Frame")
+    ticker:SetScript("OnUpdate", function()
+        local tracker = GQ.Tracker
+        if not tracker or tracker.scrollBarDragging or not tracker.scrollBarHideAt then
+            return
+        end
+
+        if GetTime() >= tracker.scrollBarHideAt then
+            tracker.scrollBarHideAt = nil
+            tracker:HideScrollBar()
+        end
+    end)
+    self.scrollBarHideTicker = ticker
+end
+
+function GQ.Tracker:CreateScrollBar(scroll, frame)
+    local scrollBar = CreateFrame("Frame", nil, frame)
+    scrollBar:SetWidth(SCROLLBAR_WIDTH)
+    scrollBar:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", 0, 0)
+    scrollBar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 0, 0)
+    scrollBar:SetFrameLevel(scroll:GetFrameLevel() + 4)
+    scrollBar:Hide()
+    scrollBar:SetAlpha(0)
+
+    local track = scrollBar:CreateTexture(nil, "ARTWORK")
+    track:SetAllPoints()
+    track:SetColorTexture(1, 1, 1, 0.12)
+
+    local thumb = CreateFrame("Button", nil, scrollBar)
+    thumb:SetWidth(SCROLLBAR_WIDTH)
+    thumb:SetHeight(SCROLLBAR_MIN_THUMB)
+    thumb:SetPoint("TOP", scrollBar, "TOP", 0, 0)
+
+    local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
+    thumbTex:SetAllPoints()
+    thumbTex:SetColorTexture(1, 1, 1, 0.55)
+
+    thumb:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then
+            GQ.Tracker:BeginThumbDrag()
+        end
+    end)
+
+    thumb:SetScript("OnMouseUp", function()
+        GQ.Tracker:StopThumbDrag()
+    end)
+
+    scrollBar:SetScript("OnEnter", function()
+        GQ.Tracker:ShowScrollBarTemporary()
+    end)
+
+    return scrollBar, thumb
+end
+
+function GQ.Tracker:OpenHunt(entryId)
+    local log = GQ.Log
+    if not log or not entryId then
+        return
+    end
+
+    if log.GetListTab and log:GetListTab() ~= "active" then
+        GearQuestDB.ui = GearQuestDB.ui or {}
+        GearQuestDB.ui.listTab = "active"
+    end
+
+    log:Show()
+    log:SelectHunt(entryId, true)
+end
+
+function GQ.Tracker:ShowResizeBorder()
+    if self.resizeBorder then
+        self.resizeBorder:Show()
+    end
+end
+
+function GQ.Tracker:HideResizeBorder()
+    if self.resizeBorder then
+        self.resizeBorder:Hide()
+    end
+end
+
+function GQ.Tracker:StopResize()
+    if not self.frame then
+        return
+    end
+
+    if self.sizing then
+        self.frame:StopMovingOrSizing()
+        self.sizing = false
+    end
+
+    self:HideResizeBorder()
+
+    local width, height = ClampSize(self.frame:GetSize())
+    width, height = self:SetFrameSize(width, height)
+    self:SaveSize(width, height)
+    self:Refresh(width, height)
+end
+
+function GQ.Tracker:BeginResize()
+    if not self.frame or not self.resizeHandle then
+        return
+    end
+
+    self.sizing = true
+    self:ShowResizeBorder()
+    self.frame:StartSizing("BOTTOMRIGHT")
+end
+
+function GQ.Tracker:Refresh(widthOverride, heightOverride)
+    if not self.frame then
+        return
+    end
+
+    local entries = self:GetTrackedEntries()
+    if #entries == 0 then
+        self:StopResize()
+        self:HideResizeBorder()
+        self.frame:Hide()
+        return
+    end
+
+    local width, height
+    if widthOverride and heightOverride then
+        width, height = ClampSize(widthOverride, heightOverride)
+    elseif self.sizing then
+        width, height = ClampSize(self.frame:GetSize())
+    else
+        width, height = self:GetSavedSize()
+    end
+    width = self:ApplyFrameWidth(width)
+
+    self.title:SetText(TITLE_TEXT)
+
+    self:EnsureEntryRows(#entries)
+
+    local titleHeight = self.title:GetStringHeight() or 14
+    local scrollHeight = math.max(MIN_HEIGHT - titleHeight - TITLE_GAP - RESIZE_GRIP, height - titleHeight - TITLE_GAP - RESIZE_GRIP)
+
+    self.scroll:ClearAllPoints()
+    self.scroll:SetPoint("TOPLEFT", self.title, "BOTTOMLEFT", 0, -TITLE_GAP)
+    self.scroll:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", 0, RESIZE_GRIP)
+    self.scroll:SetWidth(width)
+
+    self:ApplyTextWidth(width)
+    local descWordLimit = GetDescWordLimit(width)
+    local yOffset = self:LayoutEntries(entries, descWordLimit)
+
+    self.contentInner:SetHeight(math.max(yOffset, 1))
+
+    if self:GetMaxScroll() > 0 then
+        local textWidth = width - self:GetScrollGutter()
+        self:ApplyTextWidth(textWidth)
+        descWordLimit = GetDescWordLimit(textWidth)
+        yOffset = self:LayoutEntries(entries, descWordLimit)
+        self.contentInner:SetHeight(math.max(yOffset, 1))
+    end
+
+    local maxScroll = self:GetMaxScroll()
+    local currentScroll = self.scroll:GetVerticalScroll() or 0
+    if currentScroll > maxScroll then
+        self.scroll:SetVerticalScroll(maxScroll)
+    end
+
+    self:UpdateScrollBar()
+    if maxScroll <= 0 then
+        self:HideScrollBar()
+    end
+
+    if self.sizing then
+        local frameWidth, frameHeight = self.frame:GetSize()
+        width, height = ClampSize(frameWidth, frameHeight)
+        if width ~= frameWidth or height ~= frameHeight then
+            self:SetFrameSize(width, height)
+        end
+    else
+        self:SetFrameSize(width, height)
+    end
+
+    self.frame:Show()
+end
+
+function GQ.Tracker:Init()
+    if self.frame and not self.scroll then
+        self.frame:Hide()
+        self.frame = nil
+        self.title = nil
+        self.contentInner = nil
+        self.resizeHandle = nil
+        self.resizeBorder = nil
+        self.scrollBar = nil
+        self.scrollThumb = nil
+        self.entryRows = nil
+    end
+
+    if self.frame then
+        if not self.resizeBorder then
+            self.resizeBorder = CreateResizeBorder(self.frame)
+        end
+        self:EnsureScrollBarHideTicker()
+        self:Refresh()
+        return
+    end
+
+    local width, height = self:GetSavedSize()
+
+    local frame = CreateFrame("Frame", "GearQuestTracker", UIParent)
+    frame:SetSize(width, height)
+    frame:SetFrameStrata("MEDIUM")
+    frame:SetClampedToScreen(true)
+    frame:SetResizable(true)
+    frame:Hide()
+
+    local title = CreateFontStringWithFallback(frame, {
+        "QuestFont_Large",
+        "GameFontHighlightLarge",
+        "GameFontNormalLarge",
+    })
+    title:SetWidth(width)
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    title:SetJustifyH("LEFT")
+    title:SetWordWrap(true)
+    title:SetTextColor(TITLE_COLOR[1], TITLE_COLOR[2], TITLE_COLOR[3])
+    title:SetText(TITLE_TEXT)
+
+    local dragHandle = CreateFrame("Frame", nil, frame)
+    dragHandle:SetPoint("TOPLEFT", title, "TOPLEFT", -2, 2)
+    dragHandle:SetPoint("BOTTOMRIGHT", title, "BOTTOMRIGHT", 2, -2)
+    dragHandle:EnableMouse(true)
+    dragHandle:RegisterForDrag("LeftButton")
+    dragHandle:SetScript("OnDragStart", function()
+        frame:StartMoving()
+    end)
+    dragHandle:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        GQ.Tracker:SavePosition()
+    end)
+    frame:SetMovable(true)
+    frame:EnableMouseWheel(true)
+    frame:SetScript("OnMouseWheel", function(_, delta)
+        GQ.Tracker:ScrollBy(delta)
+    end)
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame)
+    scroll:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -TITLE_GAP)
+    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, RESIZE_GRIP)
+    scroll:SetWidth(width)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(_, delta)
+        GQ.Tracker:ScrollBy(delta)
+    end)
+
+    local contentInner = CreateFrame("Frame", nil, scroll)
+    contentInner:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
+    contentInner:SetWidth(width)
+    scroll:SetScrollChild(contentInner)
+
+    local scrollBar, scrollThumb = self:CreateScrollBar(scroll, frame)
+    self:EnsureScrollBarHideTicker()
+
+    local resizeHandle = CreateFrame("Button", nil, frame)
+    resizeHandle:SetSize(RESIZE_GRIP, RESIZE_GRIP)
+    resizeHandle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    resizeHandle:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeHandle:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeHandle:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeHandle:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Drag to resize", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    resizeHandle:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    resizeHandle:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then
+            GQ.Tracker:BeginResize()
+        end
+    end)
+    resizeHandle:SetScript("OnMouseUp", function()
+        GQ.Tracker:StopResize()
+    end)
+
+    frame:SetScript("OnSizeChanged", function(_, frameWidth, frameHeight)
+        if not GQ.Tracker.sizing then
+            return
+        end
+
+        local width, height = ClampSize(frameWidth, frameHeight)
+        if width ~= frameWidth or height ~= frameHeight then
+            GQ.Tracker:SetFrameSize(width, height)
+        end
+
+        GQ.Tracker:Refresh(width, height)
+    end)
+
+    self.frame = frame
+    self.title = title
+    self.scroll = scroll
+    self.contentInner = contentInner
+    self.scrollBar = scrollBar
+    self.scrollThumb = scrollThumb
+    self.resizeHandle = resizeHandle
+    self.resizeBorder = CreateResizeBorder(frame)
+    self.entryRows = {}
+
+    self:RestorePosition()
+
+    local listener = CreateFrame("Frame")
+    listener:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    listener:SetScript("OnEvent", function()
+        if GQ.Tracker.frame and GQ.Tracker.frame:IsShown() then
+            GQ.Tracker:Refresh()
+        end
+    end)
+    self.itemInfoListener = listener
+
+    self:Refresh()
+end
