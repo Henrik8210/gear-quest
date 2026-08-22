@@ -43,6 +43,28 @@ local SPEC_CONTROL_GAP = 2
 local SPEC_CONTROL_WIDTH = SPEC_ICON_SIZE + SPEC_CONTROL_GAP + SPEC_ARROW_SIZE
 local SPEC_CONTROL_HEIGHT = math.max(SPEC_ICON_SIZE, SPEC_ARROW_SIZE)
 local SPEC_ROW_GAP = 2
+local LOG_FRAME_STRATA = "DIALOG"
+local LOG_FRAME_LEVEL = 100
+
+local function ApplyLogWindowLayer(frame)
+    if not frame then
+        return
+    end
+
+    if frame.SetFrameStrata then
+        frame:SetFrameStrata(LOG_FRAME_STRATA)
+    end
+    if frame.SetFrameLevel then
+        frame:SetFrameLevel(LOG_FRAME_LEVEL)
+    end
+end
+
+local function BringLogWindowToFront(frame)
+    ApplyLogWindowLayer(frame)
+    if frame and frame.Raise then
+        frame:Raise()
+    end
+end
 local TAB_GROUP_WIDTH = (88 * 2) + 4
 local DETAIL_TEXT_COLOR = { 0.13, 0.09, 0.04 }
 local DETAIL_TEXT_HEX = "21160a"
@@ -671,7 +693,9 @@ function GQ.Log:GetActiveSlotListEntries(slotName)
     for id, record in pairs(GearQuestDB.hunts or {}) do
         if not seen[id] and NormalizeHuntStatus(record.status) == "tracked" and not self:IsEntryObtained(id) then
             local entry = GQ.Data:GetEntryById(id)
-            if entry and GQ.Data:EntryMatchesSlot(entry, slotName) and self:EntryMatchesTrackedHunt(entry) then
+            if entry and GQ.Data:EntryMatchesSlot(entry, slotName)
+                and GQ.Data:EntryMatchesPlayerBand(entry)
+                and self:EntryMatchesTrackedHunt(entry) then
                 seen[id] = true
                 table.insert(results, entry)
             end
@@ -689,7 +713,9 @@ function GQ.Log:GetCompletedSlotListEntries(slotName)
     for id, obtainedAt in pairs(GearQuestDB.obtained) do
         if not IsDismissedCompleted(id) then
             local entry = GQ.Data:GetEntryById(id)
-            if entry and GQ.Data:EntryMatchesSlot(entry, slotName) and self:EntryMatchesTrackedHunt(entry) then
+            if entry and GQ.Data:EntryMatchesSlot(entry, slotName)
+                and GQ.Data:EntryMatchesPlayerBand(entry)
+                and self:EntryMatchesTrackedHunt(entry) then
                 seen[id] = true
                 table.insert(results, {
                     entry = entry,
@@ -702,7 +728,9 @@ function GQ.Log:GetCompletedSlotListEntries(slotName)
     for id, record in pairs(GearQuestDB.hunts or {}) do
         if not seen[id] and not IsDismissedCompleted(id) and NormalizeHuntStatus(record.status) == "completed" then
             local entry = GQ.Data:GetEntryById(id)
-            if entry and GQ.Data:EntryMatchesSlot(entry, slotName) and self:EntryMatchesTrackedHunt(entry) then
+            if entry and GQ.Data:EntryMatchesSlot(entry, slotName)
+                and GQ.Data:EntryMatchesPlayerBand(entry)
+                and self:EntryMatchesTrackedHunt(entry) then
                 seen[id] = true
                 table.insert(results, {
                     entry = entry,
@@ -1147,10 +1175,7 @@ function GQ.Log:CreateListRow(index)
 
     row.highlight = row:CreateTexture(nil, "BACKGROUND")
     row.highlight:SetAllPoints()
-    row.highlight:SetTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight")
-    if row.highlight.SetBlendMode then
-        row.highlight:SetBlendMode("ADD")
-    end
+    row.highlight:SetColorTexture(0.28, 0.22, 0.08, 0.55)
     row.highlight:Hide()
 
     row:SetScript("OnEnter", function(self)
@@ -1697,6 +1722,7 @@ end
 
 function GQ.Log:BindExistingFrame(frame)
     self.frame = frame
+    ApplyLogWindowLayer(frame)
     self.listRows = {}
     self.selectedHuntId = nil
     frame.scroll = frame.scroll or _G.GearQuestLogListScrollFrame
@@ -1767,8 +1793,15 @@ function GQ.Log:Init()
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStart", function(self)
+        BringLogWindowToFront(self)
+        self:StartMoving()
+    end)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnShow", function(self)
+        BringLogWindowToFront(self)
+    end)
+    ApplyLogWindowLayer(frame)
     frame:Hide()
     tinsert(UISpecialFrames, frame:GetName())
 
@@ -2233,6 +2266,7 @@ function GQ.Log:Show()
         print("|cffff0000GearQuest log error:|r " .. tostring(err))
     end
 
+    BringLogWindowToFront(self.frame)
     self.frame:Show()
 end
 

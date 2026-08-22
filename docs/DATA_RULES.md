@@ -46,7 +46,7 @@ Before adding an entry, verify **all** of the following on the item's Wowhead (o
 | **Faction** | Set `factions = { Alliance = true }` or `{ Horde = true }` when the source is faction-locked. |
 | **Spec** (level 10+) | After talents unlock, note whether the item suits Holy / Protection / Retribution (etc.). Use optional `specs` on the entry when an item is spec-specific. |
 | **Slot** | Item equip slot must match the entry `slot` (MainHand, SecondaryHand, Chest, …). |
-| **Source type** | One of: `world_drop`, `boss_drop`, `quest_reward`, `seasonal_quest`, `vendor`, `profession`, `auction_house`. |
+| **Source type** | One of: `world_drop`, `boss_drop`, `raid_trash`, `quest_reward`, `seasonal_quest`, `vendor`, `profession`, `auction_house`. |
 | **Instructions** | 1–3 sentences: where to go, what to kill, which vendor, or how to craft — written for a player at that level. |
 
 ### Check every source category
@@ -518,3 +518,49 @@ GearQuest shows a **green ↑** on item icons when that item is one of your curr
 | `GearQuest/Toast.lua` | Obtain celebration toast |
 | `GearQuest/Log.lua` | Obtain detection, craft-only profession completion, Completed tab |
 | `GearQuest/Popup.lua` | Green checkmarks on obtained upgrade bar icons |
+
+---
+
+## TBC endgame (level 70) — token vendors and drop descriptions
+
+When adding **Tier 5 / Tier 6 vendor pieces**, the `instructions` field must name the **actual item** and the **token boss** (not a random BT boss). Shaman uses **Defender** tokens (T5) and **Protector** tokens (T6).
+
+### T6 token bosses (Protector — Warrior, Hunter, Shaman)
+
+| Slot | Token | Boss | Zone |
+|------|-------|------|------|
+| Head | Helm of the Forgotten Protector | Archimonde | Hyjal Summit |
+| Shoulder | Pauldrons of the Forgotten Protector | Mother Shahraz | Black Temple |
+| Chest | Chestguard of the Forgotten Protector | Illidan Stormrage | Black Temple |
+| Hands | Gloves of the Forgotten Protector | Azgalor | Hyjal Summit |
+| Legs | Leggings of the Forgotten Protector | Illidari Council | Black Temple |
+
+Vendor: **Tydormu** at Hyjal Summit. Set `sourceType = "vendor"`, `zone = "Hyjal Summit"`, `npc = "Tydormu"`.
+
+### T5 token bosses (Defender — Warrior, Hunter, Shaman)
+
+| Slot | Token | Boss | Zone |
+|------|-------|------|------|
+| Head | Helm of the Vanquished Defender | Lady Vashj | Serpentshrine Cavern |
+| Chest | Chestguard of the Vanquished Defender | Kael'thas Sunstrider | Tempest Keep (The Eye) |
+| Legs | Leggings of the Vanquished Defender | Fathom-Lord Karathress | Serpentshrine Cavern |
+
+Vendor: **Arodis Sunblade** in Shattrath. Set `sourceType = "vendor"`, `zone = "Shattrath City"`, `npc = "Arodis Sunblade"`.
+
+### Special sources (not direct boss drops)
+
+| Item | Correct description |
+|------|-------------------|
+| **The Sun King's Talisman** | `quest_reward` — Verdant Sphere from Kael'thas → quest *Kael'thas and the Verdant Sphere* with A'dal in Shattrath |
+| **Totem of the Void** | Cache of the Legion in The Mechanar — combine crystals from Gatewatcher Gyro-Kill and Gatewatcher Iron-Hand |
+| **Ring of Ancient Knowledge**, **Chestguard of Relentless Storms** | `raid_trash` — trash mobs in Black Temple (chest also drops Hyjal trash) |
+
+### QA after endgame imports
+
+```powershell
+node scripts/qa-level70-drops.mjs
+node scripts/qa-level70-verify-bosses.mjs
+```
+
+Re-run after any `instructions` / `npc` / token-boss edits. Wowhead tooltip API is the primary check; token item IDs (e.g. 31095 Helm of the Forgotten Protector) confirm T6 boss assignments when vendor gear has no drop line.
+

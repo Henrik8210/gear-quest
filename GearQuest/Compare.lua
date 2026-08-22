@@ -51,7 +51,7 @@ function GQ.Compare:ScoreEntry(entry, equippedIlvl, slotName, maxPreferredIlvl)
     local sourceBonus = 0
     if entry.sourceType == "quest_reward" or entry.sourceType == "seasonal_quest" then
         sourceBonus = 2
-    elseif entry.sourceType == "boss_drop" then
+    elseif entry.sourceType == "boss_drop" or entry.sourceType == "raid_trash" then
         sourceBonus = 1
     elseif entry.sourceType == "vendor" then
         sourceBonus = 1

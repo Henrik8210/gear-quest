@@ -23,6 +23,7 @@ GearQuestDB = GearQuestDB or {
 local SOURCE_LABELS = {
     world_drop = "World drop",
     boss_drop = "Boss drop",
+    raid_trash = "Raid trash",
     quest_reward = "Quest reward",
     seasonal_quest = "Seasonal quest",
     vendor = "Vendor",
@@ -33,6 +34,7 @@ local SOURCE_LABELS = {
 local SOURCE_COLORS = {
     world_drop = "|cff66ccff",
     boss_drop = "|cffff4444",
+    raid_trash = "|cffcc9966",
     quest_reward = "|cff00ff00",
     seasonal_quest = "|cffff8800",
     vendor = "|cffffcc00",
@@ -178,10 +180,14 @@ function GQ:CheckLevelMilestones(previousLevel, newLevel)
 
     -- Level 10: talent specs — log button and /gq spec filter gear lists.
     if newLevel >= 10 and previousLevel < 10 then
-        if GQ.Spec and GQ.Spec.HasSpecs and GQ.Spec:HasSpecs(GQ:GetEffectiveClass()) then
+        local classFile = GQ:GetEffectiveClass()
+        if GQ.Spec and GQ.Spec.HasSpecs and GQ.Spec:HasSpecs(classFile) then
+            local defaultLabel = GQ.Spec:GetSpecLabel(GQ.Spec:GetDefaultSpec(classFile), classFile) or "your default spec"
             self:NotifyMilestoneOnce(
                 "specSwitch",
-                "|cff66ccffGearQuest|r: Congratulations — you've reached level 10! Specializations are now available in GearQuest. Open |cff00ff00/gq log|r to browse spec-specific upgrades; |cff00ff00Retribution|r is selected by default."
+                "|cff66ccffGearQuest|r: Congratulations — you've reached level 10! Specializations are now available in GearQuest. Open |cff00ff00/gq log|r to browse spec-specific upgrades; |cff00ff00"
+                    .. defaultLabel
+                    .. "|r is selected by default."
             )
         end
     end

@@ -4,20 +4,133 @@ GQ.Spec = GQ.Spec or {}
 
 GQ.Spec.TALENT_LEVEL = 10
 
--- classFile -> ordered spec options (id, label, default for leveling BiS)
+-- Talent tab index (1–3) -> spec id per class (TBC Classic order).
+local SPEC_BY_TAB = {
+    WARRIOR = { "arms", "fury", "protection" },
+    PALADIN = { "holy", "protection", "retribution" },
+    HUNTER = { "beast_mastery", "marksmanship", "survival" },
+    ROGUE = { "assassination", "combat", "subtlety" },
+    PRIEST = { "discipline", "holy", "shadow" },
+    SHAMAN = { "elemental", "enhancement", "restoration" },
+    MAGE = { "arcane", "fire", "frost" },
+    WARLOCK = { "affliction", "demonology", "destruction" },
+    DRUID = { "balance", "feral", "restoration" },
+}
+
+-- classFile -> spec options (id, label, icon, default for leveling BiS, comingLater)
 GQ.Spec.CLASS_SPECS = {
+    WARRIOR = {
+        { id = "arms", label = "Arms", icon = "Interface\\Icons\\Ability_Warrior_SavageBlow", default = true },
+        { id = "fury", label = "Fury", icon = "Interface\\Icons\\Ability_Warrior_InnerRage" },
+        { id = "protection", label = "Protection", icon = "Interface\\Icons\\Ability_Warrior_DefensiveStance" },
+    },
     PALADIN = {
         { id = "retribution", label = "Retribution", icon = "Interface\\Icons\\Spell_Holy_AuraOfLight", default = true },
         { id = "holy", label = "Holy", icon = "Interface\\Icons\\Spell_Holy_HolyBolt", comingLater = true },
         { id = "protection", label = "Protection", icon = "Interface\\Icons\\Spell_Holy_DevotionAura", comingLater = true },
     },
+    HUNTER = {
+        { id = "beast_mastery", label = "Beast Mastery", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", default = true },
+        { id = "marksmanship", label = "Marksmanship", icon = "Interface\\Icons\\Ability_Marksmanship" },
+        { id = "survival", label = "Survival", icon = "Interface\\Icons\\Ability_Hunter_SwiftStrike" },
+    },
+    ROGUE = {
+        { id = "assassination", label = "Assassination", icon = "Interface\\Icons\\Ability_Rogue_Eviscerate", default = true },
+        { id = "combat", label = "Combat", icon = "Interface\\Icons\\Ability_BackStab" },
+        { id = "subtlety", label = "Subtlety", icon = "Interface\\Icons\\Ability_Stealth" },
+    },
+    PRIEST = {
+        { id = "shadow", label = "Shadow", icon = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", default = true },
+        { id = "discipline", label = "Discipline", icon = "Interface\\Icons\\Spell_Holy_PowerWordShield" },
+        { id = "holy", label = "Holy", icon = "Interface\\Icons\\Spell_Holy_Heal" },
+    },
+    SHAMAN = {
+        { id = "elemental", label = "Elemental", icon = "Interface\\Icons\\Spell_Nature_Lightning", default = true },
+        { id = "enhancement", label = "Enhancement", icon = "Interface\\Icons\\Spell_Nature_LightningShield", comingLater = true },
+        { id = "restoration", label = "Restoration", icon = "Interface\\Icons\\Spell_Nature_MagicImmunity", comingLater = true },
+    },
+    MAGE = {
+        { id = "frost", label = "Frost", icon = "Interface\\Icons\\Spell_Frost_FrostBolt02", default = true },
+        { id = "arcane", label = "Arcane", icon = "Interface\\Icons\\Spell_Holy_ArcaneIntellect" },
+        { id = "fire", label = "Fire", icon = "Interface\\Icons\\Spell_Fire_FireBolt02" },
+    },
+    WARLOCK = {
+        { id = "affliction", label = "Affliction", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", default = true },
+        { id = "demonology", label = "Demonology", icon = "Interface\\Icons\\Spell_Shadow_SummonFelHunter" },
+        { id = "destruction", label = "Destruction", icon = "Interface\\Icons\\Spell_Shadow_RainOfFire" },
+    },
+    DRUID = {
+        { id = "feral", label = "Feral", icon = "Interface\\Icons\\Ability_Druid_CatForm", default = true },
+        { id = "balance", label = "Balance", icon = "Interface\\Icons\\Spell_Nature_StarFall" },
+        { id = "restoration", label = "Restoration", icon = "Interface\\Icons\\Spell_Nature_HealingTouch" },
+    },
 }
 
-local PALADIN_SPEC_BY_TAB = {
-    [1] = "holy",
-    [2] = "protection",
-    [3] = "retribution",
+local SPEC_ALIASES = {
+    -- Paladin
+    ret = "retribution",
+    retribution = "retribution",
+    holy = "holy",
+    prot = "protection",
+    protection = "protection",
+    -- Warrior
+    arms = "arms",
+    fury = "fury",
+    -- Hunter
+    bm = "beast_mastery",
+    beast = "beast_mastery",
+    beastmastery = "beast_mastery",
+    beast_mastery = "beast_mastery",
+    mm = "marksmanship",
+    marksmanship = "marksmanship",
+    marks = "marksmanship",
+    survival = "survival",
+    surv = "survival",
+    -- Rogue
+    assassination = "assassination",
+    assa = "assassination",
+    combat = "combat",
+    subtlety = "subtlety",
+    sub = "subtlety",
+    -- Priest
+    discipline = "discipline",
+    disc = "discipline",
+    shadow = "shadow",
+    -- Shaman
+    elemental = "elemental",
+    ele = "elemental",
+    enhancement = "enhancement",
+    enh = "enhancement",
+    restoration = "restoration",
+    resto = "restoration",
+    rest = "restoration",
+    -- Mage
+    arcane = "arcane",
+    fire = "fire",
+    frost = "frost",
+    -- Warlock
+    affliction = "affliction",
+    aff = "affliction",
+    demonology = "demonology",
+    demo = "demonology",
+    destruction = "destruction",
+    destro = "destruction",
+    -- Druid
+    balance = "balance",
+    feral = "feral",
 }
+
+local function BuildSpecToTab(classFile)
+    local byTab = SPEC_BY_TAB[classFile]
+    if not byTab then
+        return nil
+    end
+    local map = {}
+    for tab, specId in ipairs(byTab) do
+        map[specId] = tab
+    end
+    return map
+end
 
 function GQ.Spec:GetOptions(classFile)
     return self.CLASS_SPECS[classFile]
@@ -77,22 +190,24 @@ end
 
 function GQ.Spec:GetSpecIcon(specId, classFile)
     classFile = classFile or GQ:GetEffectiveClass()
+
+    -- Prefer the live talent-tab icon so we always match the in-game tree art.
+    if GetTalentTabInfo then
+        local tabBySpec = BuildSpecToTab(classFile)
+        local tab = tabBySpec and tabBySpec[specId]
+        if tab then
+            local _, _, _, icon = GetTalentTabInfo(tab)
+            if icon then
+                return icon
+            end
+        end
+    end
+
     local options = self:GetOptions(classFile)
     if options and specId then
         for _, opt in ipairs(options) do
             if opt.id == specId and opt.icon then
                 return opt.icon
-            end
-        end
-    end
-
-    if classFile == "PALADIN" and GetTalentTabInfo then
-        local tabBySpec = { holy = 1, protection = 2, retribution = 3 }
-        local tab = tabBySpec[specId]
-        if tab then
-            local _, _, _, icon = GetTalentTabInfo(tab)
-            if icon then
-                return icon
             end
         end
     end
@@ -107,6 +222,33 @@ function GQ.Spec:GetSavedSpec(classFile)
     return GearQuestDB.settings.specByClass[classFile]
 end
 
+function GQ.Spec:ResolveSpecInput(specId, classFile)
+    specId = strtrim((specId or ""):lower())
+    if specId == "" then
+        return nil
+    end
+
+    specId = SPEC_ALIASES[specId] or specId
+
+    local options = self:GetOptions(classFile) or {}
+    for _, opt in ipairs(options) do
+        if opt.id == specId or opt.label:lower() == specId then
+            return opt.id
+        end
+    end
+
+    local compact = specId:gsub("[%s_%-]", "")
+    for _, opt in ipairs(options) do
+        local optCompact = opt.id:gsub("_", "")
+        local labelCompact = opt.label:lower():gsub("[%s_%-]", "")
+        if optCompact == compact or labelCompact == compact then
+            return opt.id
+        end
+    end
+
+    return specId
+end
+
 function GQ.Spec:SetSelectedSpec(specId, classFile)
     classFile = classFile or GQ:GetEffectiveClass()
     local options = self:GetOptions(classFile)
@@ -114,15 +256,7 @@ function GQ.Spec:SetSelectedSpec(specId, classFile)
         return false, "This class has no specialization options in GearQuest yet."
     end
 
-    specId = strtrim((specId or ""):lower())
-    local aliases = {
-        ret = "retribution",
-        holy = "holy",
-        prot = "protection",
-        protection = "protection",
-        retribution = "retribution",
-    }
-    specId = aliases[specId] or specId
+    specId = self:ResolveSpecInput(specId, classFile)
     local matched
     for _, opt in ipairs(options) do
         if opt.id == specId then
@@ -157,12 +291,13 @@ function GQ.Spec:SetSelectedSpec(specId, classFile)
 end
 
 function GQ.Spec:DetectSpecFromTalents(classFile)
-    if classFile ~= "PALADIN" or not GetTalentTabInfo then
+    local byTab = SPEC_BY_TAB[classFile]
+    if not byTab or not GetTalentTabInfo then
         return nil
     end
 
     local bestTab, bestPoints = nil, 0
-    for tab = 1, 3 do
+    for tab = 1, #byTab do
         local _, _, points = GetTalentTabInfo(tab)
         points = points or 0
         if points > bestPoints then
@@ -172,7 +307,7 @@ function GQ.Spec:DetectSpecFromTalents(classFile)
     end
 
     if bestTab and bestPoints > 0 then
-        return PALADIN_SPEC_BY_TAB[bestTab]
+        return byTab[bestTab]
     end
 
     return nil

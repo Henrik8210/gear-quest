@@ -101,6 +101,7 @@ function GQ.Preview:SetClass(classFile)
         return false, "Unknown class. Use: warrior, paladin, hunter, rogue, priest, shaman, mage, warlock, druid."
     end
     self:GetSettings().class = normalized
+    self:SetEnabled(true)
     return true
 end
 
@@ -112,6 +113,7 @@ function GQ.Preview:SetLevel(level)
     end
     level = math.floor(level)
     self:GetSettings().level = level
+    self:SetEnabled(true)
     if GQ.CheckLevelMilestones then
         GQ:CheckLevelMilestones(previousLevel, level)
     end
@@ -124,6 +126,7 @@ function GQ.Preview:SetFaction(faction)
         return false, "Unknown faction. Use: alliance or horde."
     end
     self:GetSettings().faction = normalized
+    self:SetEnabled(true)
     return true
 end
 
@@ -223,7 +226,7 @@ function GQ.Preview:PrintHelp()
     print("  |cff00ff00/gq faction alliance|r — set preview faction")
     print("  |cff00ff00/gq set on|r / |cff00ff00/gq set off|r — enable or disable preview")
     print("  |cff00ff00/gq set me|r — copy your real character into preview")
-    print("  |cff00ff00/gq spec holy|r — set specialization (level 10+, paladin)")
+    print("  |cff00ff00/gq spec enhancement|r — set specialization (level 10+)")
     print("  |cff00ff00/gq log|r — toggle GearQuest log window")
     print("  |cff00ff00/gq wipe data|r — reset hunt progress (for testing obtain/toast)")
 end
