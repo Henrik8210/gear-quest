@@ -2038,7 +2038,7 @@ function GQ.Data:GetEntryById(id)
     end
 end
 
-function GQ.Data:EntryMatchesPlayer(entry)
+function GQ.Data:EntryMatchesPlayerBand(entry)
     local classFile = GQ:GetEffectiveClass()
     if entry.classes and not entry.classes[classFile] then
         return false
@@ -2050,6 +2050,14 @@ function GQ.Data:EntryMatchesPlayer(entry)
     end
 
     if not GQ.Equip:EntryWithinLevelBand(entry) then
+        return false
+    end
+
+    return true
+end
+
+function GQ.Data:EntryMatchesPlayer(entry)
+    if not self:EntryMatchesPlayerBand(entry) then
         return false
     end
 
@@ -2096,7 +2104,7 @@ function GQ.Data:GetActiveBandMinLevel()
     local activeMinLevel
 
     for _, entry in ipairs(self.entries or {}) do
-        if self:EntryMatchesPlayer(entry) then
+        if self:EntryMatchesPlayerBand(entry) then
             local minLevel = entry.minLevel or 1
             if playerLevel >= minLevel then
                 if not activeMinLevel or minLevel > activeMinLevel then
@@ -2136,14 +2144,23 @@ function GQ.Data:GetCandidatesForSlot(slotName)
 
     for _, key in ipairs(self:GetCandidateSlotKeys(slotName)) do
         for _, entry in ipairs(self.bySlot[key] or {}) do
-            if not seen[entry.id] and self:EntryMatchesPlayer(entry) then
+            if not seen[entry.id] and self:EntryMatchesPlayerBand(entry) then
                 seen[entry.id] = true
                 table.insert(results, entry)
             end
         end
     end
 
-    return self:FilterToActiveBand(results)
+    results = self:FilterToActiveBand(results)
+
+    local filtered = {}
+    for _, entry in ipairs(results) do
+        if GQ.Equip:EntryMatchesItemRules(entry) then
+            table.insert(filtered, entry)
+        end
+    end
+
+    return filtered
 end
 
 GQ.Data.SLOT_LABELS = {
