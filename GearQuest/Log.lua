@@ -195,30 +195,35 @@ local function ExtractItemIdFromChatMessage(msg)
         return nil
     end
 
-    local itemId = tonumber(msg:match("item:(%d+)"))
-    if itemId then
-        return itemId
-    end
+    -- Only the local player's craft/loot lines — never party loot chat with item links.
+    if msg:find("You create", 1, true) then
+        local itemId = tonumber(msg:match("item:(%d+)"))
+        if itemId then
+            return itemId
+        end
 
-    if not msg:find("You create", 1, true) then
-        return nil
-    end
+        local itemName = msg:match("You create %[(.-)%]")
+            or msg:match("You create (.+)%.")
+        if not itemName then
+            return nil
+        end
 
-    local itemName = msg:match("You create %[(.-)%]")
-        or msg:match("You create (.+)%.")
-    if not itemName then
-        return nil
-    end
+        itemName = strtrim(itemName)
 
-    itemName = strtrim(itemName)
-
-    for _, entry in ipairs(GQ.Data.entries) do
-        if entry.sourceType == "profession" and entry.itemId then
-            local name = GetItemInfo(entry.itemId)
-            if name == itemName then
-                return entry.itemId
+        for _, entry in ipairs(GQ.Data.entries) do
+            if entry.sourceType == "profession" and entry.itemId then
+                local name = GetItemInfo(entry.itemId)
+                if name == itemName then
+                    return entry.itemId
+                end
             end
         end
+
+        return nil
+    end
+
+    if msg:find("You receive loot", 1, true) or msg:find("You loot", 1, true) then
+        return tonumber(msg:match("item:(%d+)"))
     end
 
     return nil
@@ -1298,7 +1303,7 @@ function GQ.Log:RefreshSpecPickerRows()
         row:Show()
 
         local selectable = GQ.Spec:IsSpecSelectable(opt.id)
-        row.icon:SetTexture(GQ.Spec:GetSpecIcon(opt.id))
+        row.icon:SetTexture(GQ.Spec:GetSpecIcon(opt.id, GQ:GetEffectiveClass()))
         if selectable then
             row.icon:SetVertexColor(1, 1, 1)
         else
@@ -1520,7 +1525,6 @@ function GQ.Log:EnsureSpecControl(frame)
 
     frame.tabSpecControl = control
     frame.tabSpecIcon = iconFrame
-    frame.tabSpecArrow = arrowBtn
     return control
 end
 
@@ -1583,7 +1587,7 @@ function GQ.Log:UpdateSpecButton()
         control:Show()
         local specId = GQ.Spec:GetEffectiveSpec()
         if self.frame.tabSpecIcon and self.frame.tabSpecIcon.icon then
-            self.frame.tabSpecIcon.icon:SetTexture(GQ.Spec:GetSpecIcon(specId))
+            self.frame.tabSpecIcon.icon:SetTexture(GQ.Spec:GetSpecIcon(specId, GQ:GetEffectiveClass()))
         end
     else
         control:Hide()

@@ -224,7 +224,8 @@ When enabling a spec later, remove `comingLater = true` from its row in `GearQue
 - **Log UI (level 10+):** top-right of the tab bar — current spec **icon** plus a **dropdown arrow**. Only the arrow opens the picker. Active/Completed stay centered below.
 - **Spec picker:** same metal border + black background as the quest log list panel. Unavailable specs are greyed, labelled `(coming later)`, and not clickable.
 - **Chat:** `/gq spec ret` (aliases: `spec`, `specialization`, `talent`). Only selectable specs work; others return *"… is coming later."*
-- **Persistence:** choice is saved per class in `GearQuestDB.settings.specByClass`.
+- **Persistence:** choice is saved per class in `GearQuestDB.settings.specByClass`. In **preview mode** (`/gq set on`), spec choice is stored in `settings.preview.specByClass` so preview browsing does not overwrite your real character’s saved spec.
+- **Icons:** spec picker uses curated icons from `CLASS_SPECS` in `Spec.lua` (do not read `GetTalentTabInfo` for icons — it reflects the **live player’s** talent trees, not the preview/effective class, and Classic return indices differ from retail).
 - **Live characters:** if no saved choice, GearQuest infers spec from talent points **when that spec is selectable**; otherwise defaults to Retribution.
 
 ### Entry field
@@ -492,7 +493,7 @@ GearQuest shows a **green ↑** on item icons when that item is one of your curr
 |----------|------|
 | **Arrow removal** | Once an item is obtained (`GearQuestDB.obtained`), its `itemId` is excluded from the indicator cache — arrows disappear on vendors, loot, recipes, and trainer UIs. Checkmarks on the character upgrade bar remain. |
 | **Celebration toast** | `Toast.lua` shows “BiS upgrade obtained!” when a top-3 item is obtained or a tracked hunt completes. Click opens log on **Completed** tab. |
-| **Profession hunts** | `sourceType = "profession"` completes only when the player **crafts** the item (`CHAT_MSG_SKILL`: “You create …”). Learning the recipe, buying, or looting the same item does **not** complete the hunt. `GearQuestDB.crafted[itemId]` tracks craft completion; `obtained` persists if the item is sold. |
+| **Profession hunts** | `sourceType = "profession"` completes only when the player **crafts** the item (`CHAT_MSG_SKILL` / `CHAT_MSG_LOOT`: “You create …”). Learning the recipe, buying, or looting the same item does **not** complete the hunt. **Party loot chat must be ignored** — only lines containing `You create`, `You receive loot`, or `You loot` may set `GearQuestDB.crafted[itemId]`. `GearQuestDB.crafted[itemId]` tracks craft completion; `obtained` persists if the item is sold. |
 
 #### Data requirements for profession indicators
 
@@ -542,7 +543,9 @@ Vendor: **Tydormu** at Hyjal Summit. Set `sourceType = "vendor"`, `zone = "Hyjal
 | Slot | Token | Boss | Zone |
 |------|-------|------|------|
 | Head | Helm of the Vanquished Defender | Lady Vashj | Serpentshrine Cavern |
+| Shoulder | Pauldrons of the Vanquished Defender | Void Reaver | Tempest Keep (The Eye) |
 | Chest | Chestguard of the Vanquished Defender | Kael'thas Sunstrider | Tempest Keep (The Eye) |
+| Hands | Gloves of the Vanquished Defender | Leotheras the Blind | Serpentshrine Cavern |
 | Legs | Leggings of the Vanquished Defender | Fathom-Lord Karathress | Serpentshrine Cavern |
 
 Vendor: **Arodis Sunblade** in Shattrath. Set `sourceType = "vendor"`, `zone = "Shattrath City"`, `npc = "Arodis Sunblade"`.
@@ -558,9 +561,84 @@ Vendor: **Arodis Sunblade** in Shattrath. Set `sourceType = "vendor"`, `zone = "
 ### QA after endgame imports
 
 ```powershell
+node scripts/import-atlasloot-p3-bis.mjs              # all Phase 3 spec lists → scripts/output/
+node scripts/import-atlasloot-p3-bis.mjs ShamanElemental_P3   # single list
 node scripts/qa-level70-drops.mjs
 node scripts/qa-level70-verify-bosses.mjs
 ```
 
+### AtlasLoot Phase 3 import (BT/Hyjal)
+
+GearQuest can draft level-70 entries from **AtlasLootClassic_TBC_Phase_3_BT_Hyjal** (sliccer BiS lists in your WoW AddOns folder):
+
+1. **`import-atlasloot-p3-bis.mjs`** reads ranked item IDs per class/spec/slot (top 3 by default).
+2. **Wowhead TBC tooltip API** fills boss drops where available.
+3. **Curated rules** handle T5/T6 token vendors, professions, PvP/badge vendors, quest rewards, raid trash, and Mechanar cache totem.
+
+Output: `scripts/output/p3-bis-import.lua` + `.json` (review `needsReview` items before merging).
+
+Requires AtlasLoot installed at  
+`World of Warcraft\_anniversary_\Interface\AddOns\AtlasLootClassic_TBC_Phase_3_BT_Hyjal\phasethreeDB.lua`.
+
+**Merge into Data.lua:**
+
+```powershell
+node scripts/import-atlasloot-p3-bis.mjs
+node scripts/merge-all-p3-into-data.mjs
+```
+
+`merge-all-p3-into-data.mjs` replaces the entire `-- Level 70 band` section, injects class/spec constants, updates `CLASS_RANGED`, and **must** append the closing `}` for `GQ.Data.entries` (the import fragment is not a complete table).
+
 Re-run after any `instructions` / `npc` / token-boss edits. Wowhead tooltip API is the primary check; token item IDs (e.g. 31095 Helm of the Forgotten Protector) confirm T6 boss assignments when vendor gear has no drop line.
+
+---
+
+## Data coverage (current)
+
+| Band | Status |
+|------|--------|
+| **Level 1–21** | Alliance Warrior & Paladin only; ~192 Alliance-locked + faction-agnostic entries |
+| **Level 22–69** | **Empty** for all classes |
+| **Level 70** | **21 Phase 3 specs** (~890 entries), all classes represented in AtlasLoot menu |
+| **Horde leveling** | No Horde-specific entries yet (faction-agnostic items still show) |
+
+Empty Neck / Trinket / Head slots while leveling usually mean **missing data**, not a broken addon. Level 70 ranged/totem slots are populated for classes in the P3 import.
+
+---
+
+## External BiS data sources
+
+| Source | Git / install | BiS lists? | Notes |
+|--------|---------------|------------|-------|
+| **[Hoizame/AtlasLootClassic](https://github.com/Hoizame/AtlasLootClassic)** | CurseForge “Source” link; `AtlasLootClassic-v3.2.0.zip` | **No** | Boss loot, crafting, factions, collections. **No** class/spec Phase 6 (Classic) or curated BiS sets in the official repo. |
+| **AtlasLootClassic_TBC_Phase_* (Sliccer)** | Bundled with [AtlasLoot TBC 2026 Anniversary](https://www.curseforge.com/wow/addons/atlasloot-tbc-2026-anniversary); **no public Git** found | **Yes (TBC)** | `Phase_0` … `Phase_3` LoadOnDemand modules. GearQuest imports **Phase 3** (`phasethreeDB.lua`). |
+| **[Warkdev/BestInSlotClassic](https://github.com/Warkdev/BestInSlotClassic)** | Abandoned ~2021 | **Yes (Classic 1–60)** | 34 specs, phases 1–6 for most classes. Different Lua format (`BIS_LINKS`). Best candidate if we add **level 60 Naxx** later — not AtlasLoot-shaped. |
+
+Classic **Phase 6 (Naxx)** BiS is **not** in the Hoizame AtlasLoot zip. AtlasLoot **Favourites** can import item-ID lists from community gists; that is manual, not structured per slot.
+
+---
+
+## Known implementation notes (2026-08)
+
+### Fixed
+
+| Area | Issue | Fix |
+|------|-------|-----|
+| `Log.lua` | Any chat line with `item:` (including party loot) wrote `crafted` | Only `You create` / `You receive loot` / `You loot` |
+| `Spec.lua` | Spec icons showed wrong class (talent-tab lookup on live player) | Curated icons from `CLASS_SPECS` only |
+| `Spec.lua` | Preview spec choice overwrote real `specByClass` | `settings.preview.specByClass` when preview on |
+| `Equip.lua` | Hunter/Shaman preferred Plate at 40 | `unlockMail = 40` → Mail |
+| `Log.lua` | `arrowBtn` undefined → duplicate spec arrow | Removed bad assignment |
+
+### Open (not yet addressed)
+
+- Hunt state is **account-wide** (`SavedVariables`, not per-character) — `/gq wipe data` wording may mislead
+- `GET_ITEM_INFO_RECEIVED` registered on multiple frames without central debouncing (login/zoning cost)
+- Quest-log reward arrows use retail frame names (likely inert on TBC 2.5)
+- `Indicator.lua` `GetChildren()` unpacking; trainer frame allocation churn
+- Levels 22–69 and Horde leveling data
+
+### Code review reference
+
+Internal review (Aug 2026) covered static analysis + coverage harness. Prioritize loot-handler and SavedVariables semantics before wide release; performance consolidation second; data breadth third.
 

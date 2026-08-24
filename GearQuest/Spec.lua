@@ -26,18 +26,18 @@ GQ.Spec.CLASS_SPECS = {
     },
     PALADIN = {
         { id = "retribution", label = "Retribution", icon = "Interface\\Icons\\Spell_Holy_AuraOfLight", default = true },
-        { id = "holy", label = "Holy", icon = "Interface\\Icons\\Spell_Holy_HolyBolt", comingLater = true },
-        { id = "protection", label = "Protection", icon = "Interface\\Icons\\Spell_Holy_DevotionAura", comingLater = true },
+        { id = "holy", label = "Holy", icon = "Interface\\Icons\\Spell_Holy_HolyBolt" },
+        { id = "protection", label = "Protection", icon = "Interface\\Icons\\Spell_Holy_DevotionAura" },
     },
     HUNTER = {
         { id = "beast_mastery", label = "Beast Mastery", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", default = true },
-        { id = "marksmanship", label = "Marksmanship", icon = "Interface\\Icons\\Ability_Marksmanship" },
+        { id = "marksmanship", label = "Marksmanship", icon = "Interface\\Icons\\Ability_Hunter_AimedShot", comingLater = true },
         { id = "survival", label = "Survival", icon = "Interface\\Icons\\Ability_Hunter_SwiftStrike" },
     },
     ROGUE = {
-        { id = "assassination", label = "Assassination", icon = "Interface\\Icons\\Ability_Rogue_Eviscerate", default = true },
-        { id = "combat", label = "Combat", icon = "Interface\\Icons\\Ability_BackStab" },
-        { id = "subtlety", label = "Subtlety", icon = "Interface\\Icons\\Ability_Stealth" },
+        { id = "combat", label = "Combat", icon = "Interface\\Icons\\Ability_BackStab", default = true },
+        { id = "assassination", label = "Assassination", icon = "Interface\\Icons\\Ability_Rogue_Eviscerate", comingLater = true },
+        { id = "subtlety", label = "Subtlety", icon = "Interface\\Icons\\Ability_Stealth", comingLater = true },
     },
     PRIEST = {
         { id = "shadow", label = "Shadow", icon = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", default = true },
@@ -46,21 +46,22 @@ GQ.Spec.CLASS_SPECS = {
     },
     SHAMAN = {
         { id = "elemental", label = "Elemental", icon = "Interface\\Icons\\Spell_Nature_Lightning", default = true },
-        { id = "enhancement", label = "Enhancement", icon = "Interface\\Icons\\Spell_Nature_LightningShield", comingLater = true },
-        { id = "restoration", label = "Restoration", icon = "Interface\\Icons\\Spell_Nature_MagicImmunity", comingLater = true },
+        { id = "enhancement", label = "Enhancement", icon = "Interface\\Icons\\Spell_Nature_LightningShield" },
+        { id = "restoration", label = "Restoration", icon = "Interface\\Icons\\Spell_Nature_MagicImmunity" },
     },
     MAGE = {
-        { id = "frost", label = "Frost", icon = "Interface\\Icons\\Spell_Frost_FrostBolt02", default = true },
+        { id = "frost", label = "Frost", icon = "Interface\\Icons\\Spell_Frost_FrostBolt02", default = true, comingLater = true },
         { id = "arcane", label = "Arcane", icon = "Interface\\Icons\\Spell_Holy_ArcaneIntellect" },
         { id = "fire", label = "Fire", icon = "Interface\\Icons\\Spell_Fire_FireBolt02" },
     },
     WARLOCK = {
-        { id = "affliction", label = "Affliction", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", default = true },
-        { id = "demonology", label = "Demonology", icon = "Interface\\Icons\\Spell_Shadow_SummonFelHunter" },
+        { id = "affliction", label = "Affliction", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", default = true, comingLater = true },
+        { id = "demonology", label = "Demonology", icon = "Interface\\Icons\\Spell_Shadow_SummonFelHunter", comingLater = true },
         { id = "destruction", label = "Destruction", icon = "Interface\\Icons\\Spell_Shadow_RainOfFire" },
     },
     DRUID = {
-        { id = "feral", label = "Feral", icon = "Interface\\Icons\\Ability_Druid_CatForm", default = true },
+        { id = "feral", label = "Feral (Cat)", icon = "Interface\\Icons\\Ability_Druid_CatForm", default = true },
+        { id = "bear", label = "Bear Tank", icon = "Interface\\Icons\\Ability_Druid_Maul" },
         { id = "balance", label = "Balance", icon = "Interface\\Icons\\Spell_Nature_StarFall" },
         { id = "restoration", label = "Restoration", icon = "Interface\\Icons\\Spell_Nature_HealingTouch" },
     },
@@ -118,6 +119,8 @@ local SPEC_ALIASES = {
     -- Druid
     balance = "balance",
     feral = "feral",
+    bear = "bear",
+    tank = "protection",
 }
 
 local function BuildSpecToTab(classFile)
@@ -190,36 +193,29 @@ end
 
 function GQ.Spec:GetSpecIcon(specId, classFile)
     classFile = classFile or GQ:GetEffectiveClass()
-
-    -- Prefer the live talent-tab icon so we always match the in-game tree art.
-    if GetTalentTabInfo then
-        local tabBySpec = BuildSpecToTab(classFile)
-        local tab = tabBySpec and tabBySpec[specId]
-        if tab then
-            local _, _, _, icon = GetTalentTabInfo(tab)
-            if icon then
-                return icon
-            end
-        end
+    local opt = self:GetSpecOption(specId, classFile)
+    if opt and opt.icon then
+        return opt.icon
     end
-
-    local options = self:GetOptions(classFile)
-    if options and specId then
-        for _, opt in ipairs(options) do
-            if opt.id == specId and opt.icon then
-                return opt.icon
-            end
-        end
-    end
-
     return "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
+local function GetSpecStore(previewMode)
+    if previewMode then
+        GearQuestDB.settings = GearQuestDB.settings or {}
+        GearQuestDB.settings.preview = GearQuestDB.settings.preview or {}
+        GearQuestDB.settings.preview.specByClass = GearQuestDB.settings.preview.specByClass or {}
+        return GearQuestDB.settings.preview.specByClass
+    end
+    GearQuestDB.settings = GearQuestDB.settings or {}
+    GearQuestDB.settings.specByClass = GearQuestDB.settings.specByClass or {}
+    return GearQuestDB.settings.specByClass
 end
 
 function GQ.Spec:GetSavedSpec(classFile)
     classFile = classFile or GQ:GetEffectiveClass()
-    GearQuestDB.settings = GearQuestDB.settings or {}
-    GearQuestDB.settings.specByClass = GearQuestDB.settings.specByClass or {}
-    return GearQuestDB.settings.specByClass[classFile]
+    local previewMode = GQ.IsPreviewEnabled and GQ:IsPreviewEnabled()
+    return GetSpecStore(previewMode)[classFile]
 end
 
 function GQ.Spec:ResolveSpecInput(specId, classFile)
@@ -279,9 +275,8 @@ function GQ.Spec:SetSelectedSpec(specId, classFile)
         return false, matched.label .. " is coming later."
     end
 
-    GearQuestDB.settings = GearQuestDB.settings or {}
-    GearQuestDB.settings.specByClass = GearQuestDB.settings.specByClass or {}
-    GearQuestDB.settings.specByClass[classFile] = matched.id
+    local previewMode = GQ.IsPreviewEnabled and GQ:IsPreviewEnabled()
+    GetSpecStore(previewMode)[classFile] = matched.id
 
     if GQ.RefreshUI then
         GQ:RefreshUI()

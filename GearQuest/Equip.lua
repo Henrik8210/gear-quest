@@ -120,8 +120,8 @@ local RECOMMENDATION_SLOTS = {
 local CLASS_ARMOR_TIER = {
     WARRIOR = { unlockPlate = 40, bestBelow = "Mail" },
     PALADIN = { unlockPlate = 40, bestBelow = "Mail" },
-    HUNTER = { unlockPlate = 40, bestBelow = "Leather" },
-    SHAMAN = { unlockPlate = 40, bestBelow = "Leather" },
+    HUNTER = { unlockMail = 40, bestBelow = "Leather" },
+    SHAMAN = { unlockMail = 40, bestBelow = "Leather" },
     DRUID = { bestBelow = "Leather" },
     ROGUE = { bestBelow = "Leather" },
     PRIEST = { bestBelow = "Cloth" },
@@ -156,6 +156,9 @@ function GQ.Equip:GetPreferredArmorSubclass(classFile, playerLevel)
     playerLevel = playerLevel or GQ:GetEffectiveLevel()
     if tier.unlockPlate and playerLevel >= tier.unlockPlate then
         return "Plate"
+    end
+    if tier.unlockMail and playerLevel >= tier.unlockMail then
+        return "Mail"
     end
 
     return tier.bestBelow

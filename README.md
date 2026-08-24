@@ -7,14 +7,25 @@ Click a gear slot on your character panel (right-click Main Hand), or browse fro
 ## MVP (v0.1.0)
 
 - **Slots:** All gear slots (character panel right-click or log browse)
-- **Classes:** Alliance Warrior & Paladin (level 1–10), **Elemental Shaman** (level 70 endgame)
-- **Specs:** Per-class talent specs from level 10; only specs with curated data are selectable (others show “coming later”)
+- **Leveling data:** Alliance Warrior & Paladin, levels **1–21** (Horde-specific entries not yet curated)
+- **Level 70 endgame:** **All 21 TBC Phase 3 (BT/Hyjal) specs** from AtlasLoot — top 3 items per slot (~890 entries)
+- **Specs:** Per-class talent specs from level 10; specs with P3 data are selectable; others show “coming later” (e.g. Frost Mage, MM Hunter, Assa/Sub Rogue)
 - **Entry points:** click a gear slot on the character panel (`C`), or `/gq` / `/gearquest` for the log
 - **Data:** static Lua table in `GearQuest/Data.lua`
 
-### Level 70 Elemental Shaman
+### Level 70 — Phase 3 BT/Hyjal (all AtlasLoot specs)
 
-Full BiS list (~3 options per slot): T6 Skyshatter vendor pieces, T5 Cataclysm, raid drops (Black Temple, Hyjal Summit, Tempest Keep, Karazhan), tailoring BoE, badge/arena vendors, and Mechanar cache totem. Drop sources were verified against Wowhead and TBC token tables (T6 tokens: Archimonde head, Mother Shahraz shoulders, Illidan chest, Azgalor hands, Illidari Council legs).
+Imported from **AtlasLootClassic_TBC_Phase_3_BT_Hyjal** (Sliccer BiS lists, not in the Hoizame GitHub repo). Covers:
+
+Rogue Combat · Hunter BM/SV · Druid Balance/Bear/Cat/Resto · Mage Arcane/Fire · Paladin Holy/Prot/Ret · Priest Holy/Shadow · Shaman Ele/Enh/Resto · Warlock Destruction · Warrior Arms/Fury/Prot
+
+Drop text comes from Wowhead enrichment + T5/T6 token rules. ~145 items may still need manual review (`needsReview` in import JSON).
+
+**Gaps:** Levels **22–69** have no entries for any class. Leveling slots (Head/Neck/Trinket) are sparse below 70.
+
+### Level 70 — earlier manual pass
+
+Elemental Shaman was hand-audited first (T6 token bosses, Sun King’s Talisman quest, Mechanar cache totem). The bulk import replaced that block; token rules in the import script follow the same tables in [docs/DATA_RULES.md](docs/DATA_RULES.md).
 
 ## Commands
 
@@ -56,11 +67,14 @@ Target: `C:\Program Files (x86)\World of Warcraft\_anniversary_\Interface\AddOns
 After editing endgame entries in `Data.lua`, verify drops against Wowhead:
 
 ```powershell
-node scripts/qa-level70-drops.mjs          # item names + boss drops from tooltips
-node scripts/qa-level70-verify-bosses.mjs  # cross-check Data.lua NPCs vs Wowhead
+node scripts/import-atlasloot-p3-bis.mjs              # all 21 Phase 3 lists → scripts/output/
+node scripts/import-atlasloot-p3-bis.mjs Rogue_P3       # single list
+node scripts/merge-all-p3-into-data.mjs               # replace level-70 band in Data.lua
+node scripts/qa-level70-drops.mjs
+node scripts/qa-level70-verify-bosses.mjs
 ```
 
-See [docs/DATA_RULES.md](docs/DATA_RULES.md) for TBC token boss assignments and endgame description rules.
+See [docs/DATA_RULES.md](docs/DATA_RULES.md) for TBC token boss assignments, AtlasLoot import workflow, data coverage gaps, and endgame description rules.
 
 ## CurseForge release
 

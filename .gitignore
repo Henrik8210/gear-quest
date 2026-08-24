@@ -6,4 +6,4 @@ Desktop.ini
 *.zip
 *.bak
 .vscode/
-.idea/
+scripts/output/
