@@ -60,6 +60,7 @@ function GQ:PLAYER_LOGIN()
         GearQuestDB.settings = GearQuestDB.settings or {}
         self.Preview:MigrateSettings()
         self.Data:BuildIndex()
+        self.Data:CacheContainerItemLinks()
         self.Indicator:Init()
         self.Log:Init()
         self.Toast:Init()
@@ -105,33 +106,49 @@ function GQ:GetEffectiveLevel()
 end
 
 function GQ:RefreshUI()
-    if self.Indicator then
-        pcall(function()
-            self.Indicator:RebuildCache()
-            self.Indicator:RefreshAll()
-        end)
+    if self._refreshScheduled then
+        return
     end
 
-    if self.Log and self.Log.frame and self.Log.frame:IsShown() then
-        pcall(function()
-            self.Log:Refresh()
-        end)
+    self._refreshScheduled = true
+
+    local function runRefresh()
+        self._refreshScheduled = false
+
+        if self.Indicator then
+            pcall(function()
+                self.Indicator:RebuildCache()
+                self.Indicator:RefreshAll()
+            end)
+        end
+
+        if self.Log and self.Log.frame and self.Log.frame:IsShown() then
+            pcall(function()
+                self.Log:Refresh()
+            end)
+        end
+
+        if self.Popup and self.Popup.container and self.Popup.container:IsShown() then
+            pcall(function()
+                if self.Popup.activeSlotName and self.Popup.activeSlotButton then
+                    self.Popup:ShowForSlot(self.Popup.activeSlotName, self.Popup.activeSlotButton)
+                else
+                    self.Popup:Hide()
+                end
+            end)
+        end
+
+        if self.Tracker then
+            pcall(function()
+                self.Tracker:Refresh()
+            end)
+        end
     end
 
-    if self.Popup and self.Popup.container and self.Popup.container:IsShown() then
-        pcall(function()
-            if self.Popup.activeSlotName and self.Popup.activeSlotButton then
-                self.Popup:ShowForSlot(self.Popup.activeSlotName, self.Popup.activeSlotButton)
-            else
-                self.Popup:Hide()
-            end
-        end)
-    end
-
-    if self.Tracker then
-        pcall(function()
-            self.Tracker:Refresh()
-        end)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, runRefresh)
+    else
+        runRefresh()
     end
 end
 

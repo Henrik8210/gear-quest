@@ -14,14 +14,20 @@ local function ShowUpgradeTooltip(button)
     end
 
     local gq = _G.GearQuest
-    GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
-    GameTooltip:SetHyperlink("item:" .. button.entry.itemId)
-    GameTooltip:AddLine(" ")
-    if gq then
-        GameTooltip:AddLine(gq:GetSourceLabel(button.entry.sourceType), 1, 1, 1)
+    if gq and gq.Data and gq.Data.ShowEntryItemTooltip then
+        gq.Data:ShowEntryItemTooltip(GameTooltip, button, button.entry, "ANCHOR_RIGHT")
+    else
+        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+        GameTooltip:SetHyperlink("item:" .. button.entry.itemId)
+        GameTooltip:Show()
     end
-    GameTooltip:AddLine("Left-click to see more details.", 0.7, 0.7, 0.7)
-    GameTooltip:Show()
+
+    if gq then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(gq:GetSourceLabel(button.entry.sourceType), 1, 1, 1)
+        GameTooltip:AddLine("Left-click to see more details.", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end
 end
 
 local function OpenUpgradeInLog(button)

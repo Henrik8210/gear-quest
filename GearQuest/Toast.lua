@@ -182,7 +182,7 @@ function GQ.Toast:ApplyEntryVisuals(entry)
         return
     end
 
-    local itemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
+    local itemName = GQ.Data:GetEntryDisplayName(entry) or ("Item " .. entry.itemId)
     frame.subtitle:SetText(itemName)
 
     local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(entry.itemId)

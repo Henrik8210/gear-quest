@@ -11,6 +11,9 @@ Spec.lua
 Preview.lua
 Equip.lua
 Data.lua
+_generated\Data.Paladin.generated.lua
+_generated\Data.Paladin.Horde.1to9.generated.lua
+DataAdapter.lua
 Compare.lua
 Indicator.lua
 Log.lua

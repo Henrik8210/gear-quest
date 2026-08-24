@@ -312,22 +312,20 @@ local function IsTrainerServiceHeader(serviceIndex)
 end
 
 function GQ.Indicator:PrimeDataItemInfo()
-    if not GQ.Data or not GQ.Data.entries then
+    -- Only prime upgrade-tracked IDs; never walk all BiS rows (10k+).
+    self.itemNameCache = self.itemNameCache or {}
+    if not self.upgradeItems then
         return
     end
 
-    self.itemNameCache = self.itemNameCache or {}
-
-    for _, entry in ipairs(GQ.Data.entries) do
-        if entry.itemId then
-            local name = GetItemInfo(entry.itemId)
+    for itemId in pairs(self.upgradeItems) do
+        local name = GetItemInfo(itemId)
+        if name then
+            self.itemNameCache[itemId] = name
+        elseif GQ.Data and GQ.Data.GetItemDisplayName then
+            name = GQ.Data:GetItemDisplayName(itemId)
             if name then
-                self.itemNameCache[entry.itemId] = name
-            elseif GQ.Data.GetItemDisplayName then
-                name = GQ.Data:GetItemDisplayName(entry.itemId)
-                if name then
-                    self.itemNameCache[entry.itemId] = name
-                end
+                self.itemNameCache[itemId] = name
             end
         end
     end
@@ -718,8 +716,8 @@ function GQ.Indicator:OnTrainerOpen()
     self:EnsureTrainerHooks()
     self:EnsureTrainerFrameHooks()
     self:EnsureTrainerListButtonHooks()
-    self:PrimeDataItemInfo()
     self:RebuildCache()
+    self:PrimeDataItemInfo()
     self:PrimeUpgradeItemInfo()
     self:ScheduleTrainerRefresh()
     self:StartTrainerDetailWatcher()
@@ -1011,7 +1009,8 @@ function GQ.Indicator:RebuildCache()
     end
 
     for _, slotName in ipairs(GQ.Data:GetSlotsForClass(classFile)) do
-        local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, 3)
+        local maxUpgrades = GQ.Data.GetMaxUpgradesForSlot and GQ.Data:GetMaxUpgradesForSlot(slotName) or 3
+        local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, maxUpgrades)
         for _, entry in ipairs(upgrades) do
             if entry.itemId and not (GQ.Log and GQ.Log.IsItemIdObtained and GQ.Log:IsItemIdObtained(entry.itemId)) then
                 self.upgradeItems[entry.itemId] = true
@@ -1418,7 +1417,6 @@ function GQ.Indicator:Init()
     self.hooks = {}
     self.itemNameCache = {}
 
-    self:PrimeDataItemInfo()
     self:RebuildCache()
     self:PrimeUpgradeItemInfo()
 
@@ -1509,8 +1507,8 @@ function GQ.Indicator:Init()
         end
 
         if event == "PLAYER_ENTERING_WORLD" then
-            GQ.Indicator:PrimeDataItemInfo()
             GQ.Indicator:RebuildCache()
+            GQ.Indicator:PrimeDataItemInfo()
             GQ.Indicator:PrimeUpgradeItemInfo()
             return
         end
@@ -1523,8 +1521,6 @@ function GQ.Indicator:Init()
                 if name then
                     GQ.Indicator.itemNameCache[itemId] = name
                 end
-            else
-                GQ.Indicator:PrimeDataItemInfo()
             end
 
             GQ.Indicator:RebuildCache()

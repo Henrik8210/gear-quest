@@ -6,4 +6,6 @@ Desktop.ini
 *.zip
 *.bak
 .vscode/
+node_modules/
 scripts/output/
+_paladin-bis-extract/

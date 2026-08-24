@@ -7,11 +7,11 @@ Click a gear slot on your character panel (right-click Main Hand), or browse fro
 ## MVP (v0.1.0)
 
 - **Slots:** All gear slots (character panel right-click or log browse)
-- **Leveling data:** Alliance Warrior & Paladin, levels **1–21** (Horde-specific entries not yet curated)
-- **Level 70 endgame:** **All 21 TBC Phase 3 (BT/Hyjal) specs** from AtlasLoot — top 3 items per slot (~890 entries)
-- **Specs:** Per-class talent specs from level 10; specs with P3 data are selectable; others show “coming later” (e.g. Frost Mage, MM Hunter, Assa/Sub Rogue)
+- **Leveling data:** Alliance Warrior & Paladin **1–9** (curated); **Paladin 10–69** (generated stat-weight pipeline); Horde Paladin **1–9** (generated)
+- **Level 70 endgame:** **All 21 TBC Phase 3 (BT/Hyjal) specs** from AtlasLoot — top 3 items per slot (~891 curated entries)
+- **Specs:** Per-class talent specs from level 10; Paladin Holy/Protection/Retribution selectable; some classes still have “coming later” specs (e.g. Frost Mage, MM Hunter)
 - **Entry points:** click a gear slot on the character panel (`C`), or `/gq` / `/gearquest` for the log
-- **Data:** static Lua table in `GearQuest/Data.lua`
+- **Data:** curated entries in `GearQuest/Data.lua`; Paladin 10–69 merged at load via `DataAdapter.lua` from `GearQuest/_generated/`
 
 ### Level 70 — Phase 3 BT/Hyjal (all AtlasLoot specs)
 
@@ -21,7 +21,15 @@ Rogue Combat · Hunter BM/SV · Druid Balance/Bear/Cat/Resto · Mage Arcane/Fire
 
 Drop text comes from Wowhead enrichment + T5/T6 token rules. ~145 items may still need manual review (`needsReview` in import JSON).
 
-**Gaps:** Levels **22–69** have no entries for any class. Leveling slots (Head/Neck/Trinket) are sparse below 70.
+**Gaps:** Levels **10–69** for classes other than Paladin. Horde leveling for non-Paladin classes relies on faction-agnostic curated items only.
+
+### Paladin generated BiS (levels 10–69)
+
+Stat-weight pipeline produces ~9,400 picks (3 specs × both factions). Level **70 is never generated** — curated AtlasLoot data replaces it. See [GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md](GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md) and [docs/DATA_RULES.md](docs/DATA_RULES.md).
+
+```powershell
+node scripts/verify-paladin-bis.mjs   # post-merge sanity check (expect 10,580 entries)
+```
 
 ### Level 70 — earlier manual pass
 

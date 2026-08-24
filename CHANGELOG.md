@@ -2,7 +2,15 @@
 
 ## v0.1.0 (unreleased)
 
-- **Level 70 Phase 3 BiS:** all 21 AtlasLoot BT/Hyjal specs (~890 entries) via import scripts
+- **Paladin generated BiS (10–69):** stat-weight pipeline, `DataAdapter.lua`, `_generated/` tables (~9,180 + 221 Horde 1–9 picks)
+- **Notables:** proc-driven items beside top 3 (Paladin); hidden at level 70
+- **Log UI:** spec picker hover highlight; notable `!` icon; suffix/origin/proc in detail; list truncation; shift/ctrl+click item links
+- **Performance:** query cache, deferred `RefreshUI`, spec-switch no longer freezes; scoped auto-completion
+- **Fixes:** Shield→Off Hand slot mapping; Protection level-70 shields; `LIST_NEW_LABEL` declaration order; notable selection; tooltip hover restored
+- **Tracker:** resize grip only on hover; tracker section hover wiring
+- **Art:** logo, portrait, minimap icon; `scripts/png-to-tga.mjs`, `scripts/verify-paladin-bis.mjs`
+- **Docs:** DATA_RULES.md dual-source rules (curated vs generated); README coverage update; `.gitattributes` for LF normalization
+- **Level 70 Phase 3 BiS:** all 21 AtlasLoot BT/Hyjal specs (~891 entries) via import scripts
 - Import tooling: `import-atlasloot-p3-bis.mjs`, `merge-all-p3-into-data.mjs`
 - Spec system: all P3 specs selectable; Druid **Bear Tank**; Frost/MM/Aff/Demo/Assa/Sub marked coming later
 - **Fixes:** spec picker icons (curated per class, no wrong talent-tab bleed); party loot no longer writes `crafted`; Hunter/Shaman mail at 40+; preview spec stored separately; duplicate spec-arrow frame removed

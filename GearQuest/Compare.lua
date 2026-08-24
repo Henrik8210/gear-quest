@@ -2,7 +2,18 @@ local _, GQ = ...
 
 GQ.Compare = GQ.Compare or {}
 
-local function GetItemLevel(itemLinkOrId)
+local function GetItemLevel(itemLinkOrId, entry)
+    if type(entry) == "table" and entry.minLevel then
+        local itemId = entry.itemId or itemLinkOrId
+        if itemId then
+            local _, _, _, itemLevel = GetItemInfo(itemId)
+            if itemLevel and itemLevel > 0 then
+                return itemLevel
+            end
+        end
+        return entry.minLevel
+    end
+
     if not itemLinkOrId then
         return 0
     end
@@ -44,7 +55,7 @@ local LOWER_ARMOR_ILVL_MARGIN = 8
 local LOWER_ARMOR_SCORE_PENALTY = 500
 
 function GQ.Compare:ScoreEntry(entry, equippedIlvl, slotName, maxPreferredIlvl)
-    local itemIlvl = GetItemLevel(entry.itemId)
+    local itemIlvl = GetItemLevel(entry.itemId, entry)
     local upgradeDelta = itemIlvl - equippedIlvl
 
     -- Simple relevance: prefer higher item level upgrades; slight bonus for quest/boss sources.
@@ -83,7 +94,7 @@ function GQ.Compare:RankEntries(entries, slotName, maxResults)
     if GQ.Equip and GQ.Equip.MeetsArmorPreference then
         for _, entry in ipairs(entries) do
             if GQ.Equip:MeetsArmorPreference(entry.itemId, slotName, classFile, playerLevel) then
-                maxPreferredIlvl = math.max(maxPreferredIlvl, GetItemLevel(entry.itemId))
+                maxPreferredIlvl = math.max(maxPreferredIlvl, GetItemLevel(entry.itemId, entry))
             end
         end
     end

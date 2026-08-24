@@ -86,6 +86,9 @@ local PROFESSION_ITEM_NAMES = {
 local MIDSUMMER_CROWN =
     "During the Midsummer Fire Festival, complete A Thief's Reward in a capital city after stealing the opposing faction's bonfire flames (or turn in if you finished in a previous year). Usable from level 1."
 
+local MIDSUMMER_MANTLE =
+    "During the Midsummer Fire Festival, complete the Wild Fires quest chain on your home continent (Wild Fires in the Eastern Kingdoms for Alliance, Wild Fires in Kalimdor for Horde). Two armor like the crown — usable from level 1."
+
 GQ.Data.entries = {
     -- Head — all classes / factions (seasonal)
     {
@@ -99,6 +102,20 @@ GQ.Data.entries = {
         instructions = MIDSUMMER_CROWN,
         zone = "Capital Cities",
         questName = "A Thief's Reward",
+    },
+
+    -- Shoulder — all classes / factions (seasonal)
+    {
+        id = "early4_all_shoulder_mantle_fire_festival",
+        itemId = 23324,
+        slot = "Shoulder",
+        minLevel = EARLY_MIN,
+        maxLevel = EARLY_MAX,
+        curatedRank = 1,
+        sourceType = "seasonal_quest",
+        instructions = MIDSUMMER_MANTLE,
+        zone = "Capital Cities",
+        questName = "Wild Fires",
     },
 
     -- Level 1 band — Alliance mail melee (warrior / paladin)
@@ -10573,7 +10590,7 @@ GQ.Data.entries = {
     {
         id = "level70_paladin_protection_shield_bulwark_of_azzinoth",
         itemId = 32375,
-        slot = "Shield",
+        slot = "SecondaryHand",
         minLevel = LEVEL70_MIN,
         maxLevel = LEVEL70_MAX,
         classes = PALADIN,
@@ -10587,7 +10604,7 @@ GQ.Data.entries = {
     {
         id = "level70_paladin_protection_shield_antonidas_s_aegis_of_rapt_concentration",
         itemId = 30909,
-        slot = "Shield",
+        slot = "SecondaryHand",
         minLevel = LEVEL70_MIN,
         maxLevel = LEVEL70_MAX,
         classes = PALADIN,
@@ -10601,7 +10618,7 @@ GQ.Data.entries = {
     {
         id = "level70_paladin_protection_shield_kaz_rogal_s_hardened_heart",
         itemId = 30889,
-        slot = "Shield",
+        slot = "SecondaryHand",
         minLevel = LEVEL70_MIN,
         maxLevel = LEVEL70_MAX,
         classes = PALADIN,
@@ -10611,6 +10628,19 @@ GQ.Data.entries = {
         instructions = "Farm Kaz'rogal in Hyjal Summit for Kaz'rogal's Hardened Heart.",
         zone = "Hyjal Summit",
         npc = "Kaz'rogal",
+    },
+    {
+        id = "level70_paladin_protection_shield_illidari_runeshield",
+        itemId = 34011,
+        slot = "SecondaryHand",
+        minLevel = LEVEL70_MIN,
+        maxLevel = LEVEL70_MAX,
+        classes = PALADIN,
+        specs = SPEC_PROTECTION,
+        curatedRank = 4,
+        sourceType = "raid_trash",
+        instructions = "Farm trash mobs inside Black Temple for Illidari Runeshield.",
+        zone = "Black Temple",
     },
 
     -- PALADIN / retribution (AtlasLoot PaladinRetribution_P3)
@@ -16616,6 +16646,9 @@ GQ.Data.MERGED_SLOT_INVENTORY = {
 }
 
 function GQ.Data:NormalizeSlotName(slotName)
+    if slotName == "Shield" then
+        return "SecondaryHand"
+    end
     if slotName == "Finger0" or slotName == "Finger1" then
         return "Finger"
     end
@@ -16658,18 +16691,34 @@ function GQ.Data:GetCandidateSlotKeys(slotName)
     if slotName == "Trinket" then
         return { "Trinket", "Trinket0", "Trinket1" }
     end
+    if slotName == "SecondaryHand" then
+        return { "SecondaryHand", "Shield" }
+    end
     return { slotName }
 end
 
 function GQ.Data:BuildIndex()
     self.bySlot = {}
     self.byItemId = {}
+    self.byId = {}
+    self.byClass = {}
     for _, entry in ipairs(self.entries) do
-        self.bySlot[entry.slot] = self.bySlot[entry.slot] or {}
-        table.insert(self.bySlot[entry.slot], entry)
+        local slot = self:NormalizeSlotName(entry.slot)
+        self.bySlot[slot] = self.bySlot[slot] or {}
+        table.insert(self.bySlot[slot], entry)
         self.byItemId[entry.itemId] = self.byItemId[entry.itemId] or {}
         table.insert(self.byItemId[entry.itemId], entry)
+        if entry.id then
+            self.byId[entry.id] = entry
+        end
+        if entry.classes then
+            for classFile in pairs(entry.classes) do
+                self.byClass[classFile] = self.byClass[classFile] or {}
+                table.insert(self.byClass[classFile], entry)
+            end
+        end
     end
+    self:InvalidateQueryCache()
 end
 
 function GQ.Data:GetEntriesByItemId(itemId)
@@ -16692,12 +16741,573 @@ function GQ.Data:GetItemDisplayName(itemId)
     return PROFESSION_ITEM_NAMES[itemId]
 end
 
+function GQ.Data:GetEntryDisplayName(entry)
+    if not entry then
+        return nil
+    end
+
+    local base = self:GetItemDisplayName(entry.itemId) or ("Item " .. tostring(entry.itemId))
+    local suffix = entry.suffix
+    if suffix and suffix ~= "" then
+        suffix = tostring(suffix)
+        if suffix:sub(1, 1) == " " then
+            return base .. suffix
+        end
+        return base .. " " .. suffix
+    end
+
+    return base
+end
+
+function GQ.Data:GetSuffixHint(entry)
+    if not entry or not entry.suffix then
+        return nil
+    end
+
+    if entry.suffixChance then
+        return entry.suffix .. " (~" .. tostring(entry.suffixChance) .. "% on drop)"
+    end
+
+    return entry.suffix
+end
+
+-- Novelty on-use effects (fall damage/speed, drunk, party-only buffs, etc.) are not
+-- real upgrades for the level band — hide them from picks and notables.
+local NOVELTY_PROC_PATTERNS = {
+    "fall speed",
+    "fall damage",
+    "slow fall",
+    "safe fall",
+    "parachute",
+    "gets you quite drunk",
+    "unless it explodes",
+    "turns the target into a chicken",
+    "look far into the distance",
+    "nearby party members",
+    "party members within",
+    "summons the truesilver boar",
+}
+
+function GQ.Data:GetEntryProcText(entry)
+    if not entry then
+        return nil
+    end
+
+    if entry.proc and entry.proc ~= "" then
+        return entry.proc
+    end
+
+    local facts = self.itemFacts
+    if facts and entry.itemId then
+        local fact = facts[entry.itemId]
+        if fact and fact.proc and fact.proc ~= "" then
+            return fact.proc
+        end
+    end
+
+    return nil
+end
+
+function GQ.Data:IsNoveltyProcItem(entry)
+    local proc = self:GetEntryProcText(entry)
+    if not proc then
+        return false
+    end
+
+    local lower = string.lower(tostring(proc))
+    for i = 1, #NOVELTY_PROC_PATTERNS do
+        if lower:find(NOVELTY_PROC_PATTERNS[i], 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+function GQ.Data:ShouldShowEntry(entry)
+    return entry and not self:IsNoveltyProcItem(entry)
+end
+
+function GQ.Data:GetTooltipScanner()
+    if not self._tooltipScanner then
+        self._tooltipScanner = CreateFrame("GameTooltip", "GearQuestTooltipScanner", UIParent, "GameTooltipTemplate")
+    end
+    return self._tooltipScanner
+end
+
+function GQ.Data:CacheSuffixItemLink(entry, link)
+    if not entry or not link then
+        return
+    end
+
+    local key = self:EntryListKey(entry)
+    if not key then
+        return
+    end
+
+    self.suffixLinkCache = self.suffixLinkCache or {}
+    self.suffixLinkCache[key] = link
+end
+
+function GQ.Data:GetCachedSuffixItemLink(entry)
+    if not entry then
+        return nil
+    end
+
+    local key = self:EntryListKey(entry)
+    if not key then
+        return nil
+    end
+
+    if self.suffixLinkCache and self.suffixLinkCache[key] then
+        return self.suffixLinkCache[key]
+    end
+
+    return nil
+end
+
+function GQ.Data:FindCachedItemLink(entry)
+    if not entry or not entry.itemId then
+        return nil
+    end
+
+    local cached = self:GetCachedSuffixItemLink(entry)
+    if cached then
+        return cached
+    end
+
+    local function checkLink(link)
+        if not link or self:ItemLinkToId(link) ~= entry.itemId then
+            return nil
+        end
+
+        if entry.suffix and entry.suffix ~= "" then
+            if not self:ItemNameMatchesEntry(self:ItemNameFromLink(link), entry) then
+                return nil
+            end
+        end
+
+        self:CacheSuffixItemLink(entry, link)
+        return link
+    end
+
+    for invSlot = 1, 19 do
+        local link = checkLink(GetInventoryItemLink("player", invSlot))
+        if link then
+            return link
+        end
+    end
+
+    local numBags = NUM_BAG_SLOTS or 4
+    for bag = 0, numBags do
+        local numSlots
+        if C_Container and C_Container.GetContainerNumSlots then
+            numSlots = C_Container.GetContainerNumSlots(bag) or 0
+        elseif GetContainerNumSlots then
+            numSlots = GetContainerNumSlots(bag) or 0
+        else
+            numSlots = 0
+        end
+
+        for slot = 1, numSlots do
+            local link
+            if C_Container and C_Container.GetContainerItemLink then
+                link = C_Container.GetContainerItemLink(bag, slot)
+            elseif GetContainerItemLink then
+                link = GetContainerItemLink(bag, slot)
+            end
+
+            link = checkLink(link)
+            if link then
+                return link
+            end
+        end
+    end
+
+    return nil
+end
+
+function GQ.Data:ResolveSuffixItemLink(entry)
+    if not entry or not entry.suffix or entry.suffix == "" or not entry.itemId then
+        return nil
+    end
+
+    local key = self:EntryListKey(entry)
+    if not key then
+        return nil
+    end
+
+    self._resolvedSuffixLinks = self._resolvedSuffixLinks or {}
+    local resolved = self._resolvedSuffixLinks[key]
+    if resolved == false then
+        return nil
+    end
+    if resolved then
+        return resolved
+    end
+
+    local owned = self:FindCachedItemLink(entry)
+    if owned then
+        self._resolvedSuffixLinks[key] = owned
+        return owned
+    end
+
+    local targetName = self:NormalizeItemName(self:GetEntryDisplayName(entry))
+    if not targetName then
+        self._resolvedSuffixLinks[key] = false
+        return nil
+    end
+
+    local scanner = self:GetTooltipScanner()
+    local scannerName = scanner:GetName()
+    scanner:SetOwner(UIParent, "ANCHOR_NONE")
+
+    local function tryLink(link)
+        scanner:ClearLines()
+        scanner:SetHyperlink(link)
+        local line1 = _G[scannerName .. "TextLeft1"]
+        local text = line1 and line1:GetText()
+        if text and self:NormalizeItemName(text) == targetName then
+            self:CacheSuffixItemLink(entry, link)
+            return link
+        end
+    end
+
+    local itemId = entry.itemId
+    for suffixId = -1, -250, -1 do
+        local link = string.format("item:%d:0:0:0:0:0:%d:0", itemId, suffixId)
+        local found = tryLink(link)
+        if found then
+            self._resolvedSuffixLinks[key] = found
+            scanner:Hide()
+            return found
+        end
+    end
+
+    for suffixId = 1, 250 do
+        local link = string.format("item:%d:0:0:0:0:0:%d:0", itemId, suffixId)
+        local found = tryLink(link)
+        if found then
+            self._resolvedSuffixLinks[key] = found
+            scanner:Hide()
+            return found
+        end
+    end
+
+    scanner:Hide()
+    self._resolvedSuffixLinks[key] = false
+    return nil
+end
+
+function GQ.Data:CopyTooltipLinesFromScanner(tooltip, scanner, skipTitle)
+    local scannerName = scanner:GetName()
+    local startLine = skipTitle and 2 or 1
+
+    for i = startLine, scanner:NumLines() do
+        local left = _G[scannerName .. "TextLeft" .. i]
+        local right = _G[scannerName .. "TextRight" .. i]
+        if left then
+            local text = left:GetText()
+            if text and text ~= "" then
+                local lr, lg, lb = left:GetTextColor()
+                if right then
+                    local rightText = right:GetText()
+                    if rightText and rightText ~= "" then
+                        local rr, rg, rb = right:GetTextColor()
+                        tooltip:AddDoubleLine(text, rightText, lr, lg, lb, rr, rg, rb)
+                    else
+                        tooltip:AddLine(text, lr, lg, lb)
+                    end
+                else
+                    tooltip:AddLine(text, lr, lg, lb)
+                end
+            end
+        end
+    end
+end
+
+function GQ.Data:ShowSuffixFallbackTooltip(tooltip, entry)
+    local itemId = entry.itemId
+    local scanner = self:GetTooltipScanner()
+    scanner:SetOwner(UIParent, "ANCHOR_NONE")
+    scanner:ClearLines()
+    scanner:SetHyperlink("item:" .. itemId)
+
+    local displayName = self:GetEntryDisplayName(entry)
+    local _, _, quality = GetItemInfo(itemId)
+    local r, g, b = GetItemQualityColor(quality or 1)
+
+    tooltip:ClearLines()
+    tooltip:SetText(displayName, r, g, b)
+    self:CopyTooltipLinesFromScanner(tooltip, scanner, true)
+
+    local suffixHint = self:GetSuffixHint(entry)
+    if suffixHint then
+        tooltip:AddLine(" ")
+        tooltip:AddLine("Target random enchant: " .. suffixHint, 0.7, 0.9, 1)
+    end
+
+    scanner:Hide()
+end
+
+function GQ.Data:GetEntryItemHyperlink(entry)
+    if not entry or not entry.itemId then
+        return nil
+    end
+
+    if entry.suffix and entry.suffix ~= "" then
+        local link = self:ResolveSuffixItemLink(entry)
+        if link then
+            return link
+        end
+    end
+
+    return select(2, GetItemInfo(entry.itemId)) or ("item:" .. entry.itemId)
+end
+
+function GQ.Data:PopulateEntryItemTooltip(tooltip, entry)
+    if not tooltip or not entry or not entry.itemId then
+        return false
+    end
+
+    if entry.suffix and entry.suffix ~= "" then
+        local link = self:ResolveSuffixItemLink(entry)
+        if link then
+            tooltip:SetHyperlink(link)
+            return true
+        end
+
+        self:ShowSuffixFallbackTooltip(tooltip, entry)
+        return true
+    end
+
+    tooltip:SetHyperlink("item:" .. entry.itemId)
+    if entry.proc then
+        tooltip:AddLine(" ")
+        tooltip:AddLine(entry.proc, 1, 1, 1, true)
+    end
+
+    return true
+end
+
+function GQ.Data:ShowEntryItemTooltip(tooltip, owner, entry, anchor, ...)
+    if not tooltip or not entry or not entry.itemId then
+        return
+    end
+
+    tooltip:SetOwner(owner, anchor or "ANCHOR_RIGHT", ...)
+    self:PopulateEntryItemTooltip(tooltip, entry)
+    tooltip:Show()
+end
+
+function GQ.Data:CacheContainerItemLinks()
+    if not self.byItemId then
+        return
+    end
+
+    local function cacheLink(link)
+        if not link then
+            return
+        end
+
+        local itemId = self:ItemLinkToId(link)
+        if not itemId then
+            return
+        end
+
+        local itemName = self:ItemNameFromLink(link)
+        if not itemName or not itemName:find(" of ", 1, true) then
+            return
+        end
+
+        for _, entry in ipairs(self.byItemId[itemId] or {}) do
+            if entry.suffix and self:ItemNameMatchesEntry(itemName, entry) then
+                self:CacheSuffixItemLink(entry, link)
+                local key = self:EntryListKey(entry)
+                if key then
+                    self._resolvedSuffixLinks = self._resolvedSuffixLinks or {}
+                    self._resolvedSuffixLinks[key] = link
+                end
+            end
+        end
+    end
+
+    for invSlot = 1, 19 do
+        cacheLink(GetInventoryItemLink("player", invSlot))
+    end
+
+    local numBags = NUM_BAG_SLOTS or 4
+    for bag = 0, numBags do
+        local numSlots
+        if C_Container and C_Container.GetContainerNumSlots then
+            numSlots = C_Container.GetContainerNumSlots(bag) or 0
+        elseif GetContainerNumSlots then
+            numSlots = GetContainerNumSlots(bag) or 0
+        else
+            numSlots = 0
+        end
+
+        for slot = 1, numSlots do
+            local link
+            if C_Container and C_Container.GetContainerItemLink then
+                link = C_Container.GetContainerItemLink(bag, slot)
+            elseif GetContainerItemLink then
+                link = GetContainerItemLink(bag, slot)
+            end
+            cacheLink(link)
+        end
+    end
+end
+
+function GQ.Data:NormalizeItemName(name)
+    if not name then
+        return nil
+    end
+
+    if strtrim then
+        return strtrim(name)
+    end
+
+    return (name:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+function GQ.Data:ItemNameMatchesEntry(itemName, entry)
+    if not itemName or not entry then
+        return false
+    end
+
+    return self:NormalizeItemName(itemName) == self:GetEntryDisplayName(entry)
+end
+
+function GQ.Data:ItemLinkToId(link)
+    if not link then
+        return nil
+    end
+
+    return tonumber(link:match("item:(%d+)"))
+end
+
+function GQ.Data:ItemNameFromLink(link)
+    if not link then
+        return nil
+    end
+
+    local itemId = self:ItemLinkToId(link)
+    if itemId then
+        local name = GetItemInfo(itemId)
+        if name then
+            return name
+        end
+    end
+
+    return link:match("%[(.-)%]")
+end
+
+function GQ.Data:PlayerOwnsEntryItem(entry)
+    if not entry or not entry.itemId then
+        return false
+    end
+
+    local itemId = entry.itemId
+    local needsSuffix = entry.suffix and entry.suffix ~= ""
+
+    local function linkMatches(link)
+        if self:ItemLinkToId(link) ~= itemId then
+            return false
+        end
+
+        if needsSuffix then
+            return self:ItemNameMatchesEntry(self:ItemNameFromLink(link), entry)
+        end
+
+        return true
+    end
+
+    local ok, owned = pcall(function()
+        for invSlot = 1, 19 do
+            if linkMatches(GetInventoryItemLink("player", invSlot)) then
+                return true
+            end
+        end
+
+        local numBags = NUM_BAG_SLOTS or 4
+        for bag = 0, numBags do
+            local numSlots
+            if C_Container and C_Container.GetContainerNumSlots then
+                numSlots = C_Container.GetContainerNumSlots(bag) or 0
+            elseif GetContainerNumSlots then
+                numSlots = GetContainerNumSlots(bag) or 0
+            else
+                numSlots = 0
+            end
+
+            for slot = 1, numSlots do
+                local link
+                if C_Container and C_Container.GetContainerItemLink then
+                    link = C_Container.GetContainerItemLink(bag, slot)
+                elseif GetContainerItemLink then
+                    link = GetContainerItemLink(bag, slot)
+                end
+
+                if linkMatches(link) then
+                    return true
+                end
+            end
+        end
+
+        return false
+    end)
+
+    return ok and owned or false
+end
+
 function GQ.Data:GetEntryById(id)
+    if not id then
+        return nil
+    end
+    if self.byId then
+        return self.byId[id]
+    end
     for _, entry in ipairs(self.entries) do
         if entry.id == id then
             return entry
         end
     end
+end
+
+function GQ.Data:InvalidatePlayerBandCache()
+    self:InvalidateQueryCache()
+end
+
+function GQ.Data:InvalidateQueryCache()
+    self._queryCache = nil
+    self._activeBandCache = nil
+end
+
+function GQ.Data:GetQueryCacheKey()
+    return self:GetActiveBandCacheKey()
+end
+
+function GQ.Data:EnsureQueryCache()
+    local cacheKey = self:GetQueryCacheKey()
+    if self._queryCache and self._queryCache.key == cacheKey then
+        return
+    end
+
+    self._queryCache = {
+        key = cacheKey,
+        candidates = {},
+        topUpgrades = {},
+        activeBandMin = nil,
+    }
+end
+
+function GQ.Data:GetActiveBandCacheKey()
+    local spec = GQ.GetEffectiveSpec and GQ:GetEffectiveSpec() or ""
+    return (GQ:GetEffectiveLevel() or 0) .. ":"
+        .. (GQ:GetEffectiveClass() or "") .. ":"
+        .. (GQ:GetEffectiveFaction() or "") .. ":"
+        .. tostring(spec)
 end
 
 function GQ.Data:EntryMatchesPlayerBand(entry)
@@ -16814,16 +17424,247 @@ function GQ.Data:FilterToActiveBand(entries)
     return filtered
 end
 
-function GQ.Data:GetActiveBandMinLevel()
-    local candidates = {}
+function GQ.Data:EntryListKey(entry)
+    if not entry or not entry.itemId then
+        return nil
+    end
 
-    for _, entry in ipairs(self.entries or {}) do
-        if self:EntryMatchesPlayerBand(entry) then
-            table.insert(candidates, entry)
+    if entry.suffix and entry.suffix ~= "" then
+        return entry.itemId .. "\0" .. entry.suffix
+    end
+
+    return tostring(entry.itemId)
+end
+
+function GQ.Data:PreferEntry(a, b)
+    if not a then
+        return false
+    end
+    if not b then
+        return true
+    end
+
+    if a.generated ~= b.generated then
+        return not a.generated
+    end
+
+    local rankA = a.curatedRank or 99
+    local rankB = b.curatedRank or 99
+    if rankA ~= rankB then
+        return rankA < rankB
+    end
+
+    return (a.minLevel or 0) > (b.minLevel or 0)
+end
+
+function GQ.Data:DeduplicateEntriesByItem(entries)
+    local best = {}
+    local order = {}
+
+    for _, entry in ipairs(entries or {}) do
+        local key = self:EntryListKey(entry)
+        if key then
+            local prev = best[key]
+            if not prev then
+                order[#order + 1] = key
+                best[key] = entry
+            elseif self:PreferEntry(entry, prev) then
+                best[key] = entry
+            end
         end
     end
 
-    local activeMinLevel = self:SelectActiveBand(candidates)
+    local results = {}
+    for i = 1, #order do
+        results[i] = best[order[i]]
+    end
+
+    return results
+end
+
+function GQ.Data:BackfillCandidates(allEntries, filtered, minCount)
+    minCount = minCount or 3
+    filtered = self:DeduplicateEntriesByItem(filtered)
+    if not filtered or #filtered >= minCount then
+        return filtered
+    end
+
+    local playerLevel = GQ:GetEffectiveLevel()
+    local activeMinLevel, activeMaxLevel = self:SelectActiveBand(allEntries, playerLevel)
+
+    local seen = {}
+    local seenItem = {}
+    for _, entry in ipairs(filtered) do
+        seen[entry.id] = true
+        local key = self:EntryListKey(entry)
+        if key then
+            seenItem[key] = true
+        end
+    end
+
+    local extras = {}
+    for _, entry in ipairs(allEntries or {}) do
+        if not seen[entry.id] and not entry.notable and self:ShouldShowEntry(entry) then
+            local key = self:EntryListKey(entry)
+            if key and not seenItem[key] and activeMinLevel
+                and self:EntryInActiveBand(entry, activeMinLevel, activeMaxLevel) then
+                extras[#extras + 1] = entry
+            end
+        end
+    end
+
+    table.sort(extras, function(a, b)
+        local rankA = a.curatedRank or 99
+        local rankB = b.curatedRank or 99
+        if rankA ~= rankB then
+            return rankA < rankB
+        end
+        return (a.minLevel or 0) > (b.minLevel or 0)
+    end)
+
+    for _, entry in ipairs(extras) do
+        if #filtered >= minCount then
+            break
+        end
+        local key = self:EntryListKey(entry)
+        if key and not seenItem[key] then
+            seen[entry.id] = true
+            seenItem[key] = true
+            filtered[#filtered + 1] = entry
+        end
+    end
+
+    return self:DeduplicateEntriesByItem(filtered)
+end
+
+function GQ.Data:BuildNotableEntry(row, facts)
+    if not row or not facts then
+        return nil
+    end
+
+    local itemId, slot, minL, maxL = row[1], row[2], row[3], row[4]
+    local spec, faction = row[5], row[6]
+    local f = facts[itemId]
+    if not f then
+        return nil
+    end
+
+    if f.proc then
+        local probe = { itemId = itemId, proc = f.proc }
+        if self:IsNoveltyProcItem(probe) then
+            return nil
+        end
+    end
+
+    local PALADIN = { PALADIN = true }
+    local SPEC = {
+        retribution = { retribution = true },
+        protection = { protection = true },
+        holy = { holy = true },
+    }
+    local FACTION = {
+        Alliance = { Alliance = true },
+        Horde = { Horde = true },
+    }
+
+    return {
+        id = string.format("notable:%d:%s:%d:%s:%s", itemId, slot, minL, tostring(spec), tostring(faction)),
+        itemId = itemId,
+        slot = slot,
+        minLevel = minL,
+        maxLevel = maxL,
+        classes = PALADIN,
+        specs = spec and SPEC[spec] or nil,
+        factions = faction and FACTION[faction] or nil,
+        sourceType = f.sourceType,
+        instructions = f.instructions,
+        zone = f.zone,
+        npc = f.npc,
+        questName = f.questName,
+        profession = f.profession,
+        proc = f.proc,
+        generated = true,
+        notable = true,
+    }
+end
+
+function GQ.Data:EnsureNotableBySlot()
+    if self.notableBySlot then
+        return
+    end
+
+    self.notableBySlot = {}
+    local rows = self.paladinNotable
+    if not rows then
+        return
+    end
+
+    for i = 1, #rows do
+        local row = rows[i]
+        local slot = self:NormalizeSlotName(row[2])
+        self.notableBySlot[slot] = self.notableBySlot[slot] or {}
+        table.insert(self.notableBySlot[slot], row)
+    end
+end
+
+function GQ.Data:GetNotableForSlot(slotName)
+    if (GQ:GetEffectiveLevel() or 1) >= 70 then
+        return {}
+    end
+
+    local rows = self.paladinNotable
+    local facts = self.itemFacts
+    if not rows or not facts or GQ:GetEffectiveClass() ~= "PALADIN" then
+        return {}
+    end
+
+    slotName = self:NormalizeSlotName(slotName)
+    self:EnsureNotableBySlot()
+    local slotRows = self.notableBySlot[slotName]
+    if not slotRows then
+        return {}
+    end
+
+    local results = {}
+    for i = 1, #slotRows do
+        local entry = self:BuildNotableEntry(slotRows[i], facts)
+        if entry and self:EntryMatchesPlayerBand(entry) then
+            table.insert(results, entry)
+        end
+    end
+
+    results = self:FilterToActiveBand(results)
+    return self:DeduplicateEntriesByItem(results)
+end
+
+function GQ.Data:GetActiveBandMinLevel()
+    local cacheKey = self:GetActiveBandCacheKey()
+    if self._activeBandCache and self._activeBandCache.key == cacheKey then
+        return self._activeBandCache.value
+    end
+
+    self:EnsureQueryCache()
+    if self._queryCache.activeBandMin ~= nil then
+        self._activeBandCache = { key = cacheKey, value = self._queryCache.activeBandMin }
+        return self._queryCache.activeBandMin
+    end
+
+    local merged = {}
+    for _, slotName in ipairs(self.BASE_SLOTS) do
+        if self:IsSlotUnlocked(slotName) then
+            local candidates = self:GetCandidatesForSlot(slotName)
+            for i = 1, math.min(#candidates, 8) do
+                merged[#merged + 1] = candidates[i]
+            end
+            if #merged >= 16 then
+                break
+            end
+        end
+    end
+
+    local activeMinLevel = self:SelectActiveBand(merged)
+    self._queryCache.activeBandMin = activeMinLevel
+    self._activeBandCache = { key = cacheKey, value = activeMinLevel }
     return activeMinLevel
 end
 
@@ -16841,30 +17682,31 @@ function GQ.Data:IsEntryNewForPlayer(entry)
 end
 
 function GQ.Data:GetCandidatesForSlot(slotName)
+    slotName = self:NormalizeSlotName(slotName)
+    self:EnsureQueryCache()
+
+    local cached = self._queryCache.candidates[slotName]
+    if cached then
+        return cached
+    end
+
     local results = {}
     local seen = {}
 
     for _, key in ipairs(self:GetCandidateSlotKeys(slotName)) do
         for _, entry in ipairs(self.bySlot[key] or {}) do
-            if entry.itemId then
-                GetItemInfo(entry.itemId)
-            end
-        end
-    end
-
-    for _, key in ipairs(self:GetCandidateSlotKeys(slotName)) do
-        for _, entry in ipairs(self.bySlot[key] or {}) do
-            if not seen[entry.id] and self:EntryMatchesPlayerBand(entry) then
+            if not seen[entry.id] and self:ShouldShowEntry(entry) and self:EntryMatchesPlayerBand(entry) then
                 seen[entry.id] = true
                 table.insert(results, entry)
             end
         end
     end
 
+    local allMatching = results
     results = self:FilterToActiveBand(results)
-
-    -- Curated band entries are hunt targets; do not hide them for item req level or
-    -- weapon skill until a later band replaces them (see EntryMatchesPlayer for obtain checks).
+    results = self:BackfillCandidates(allMatching, results, 3)
+    results = self:DeduplicateEntriesByItem(results)
+    self._queryCache.candidates[slotName] = results
     return results
 end
 
@@ -16936,10 +17778,29 @@ function GQ.Data:GetSlotsForClass(classFile)
     return slots
 end
 
+function GQ.Data:GetMaxUpgradesForSlot(slotName)
+    slotName = self:NormalizeSlotName(slotName)
+    if slotName == "SecondaryHand" and (GQ:GetEffectiveLevel() or 1) >= 70 then
+        return 4
+    end
+    return 3
+end
+
 function GQ.Data:GetTopUpgradesForSlot(slotName, maxResults)
     slotName = self:NormalizeSlotName(slotName)
+    maxResults = maxResults or self:GetMaxUpgradesForSlot(slotName)
+    self:EnsureQueryCache()
+
+    local cacheKey = slotName .. ":" .. maxResults
+    local cached = self._queryCache.topUpgrades[cacheKey]
+    if cached then
+        return cached
+    end
+
     local candidates = self:GetCandidatesForSlot(slotName)
-    return GQ.Compare:RankEntries(candidates, slotName, maxResults or 3)
+    local results = GQ.Compare:RankEntries(candidates, slotName, maxResults)
+    self._queryCache.topUpgrades[cacheKey] = results
+    return results
 end
 
 function GQ.Data:SlotLabel(slotName)

@@ -278,6 +278,10 @@ function GQ.Spec:SetSelectedSpec(specId, classFile)
     local previewMode = GQ.IsPreviewEnabled and GQ:IsPreviewEnabled()
     GetSpecStore(previewMode)[classFile] = matched.id
 
+    if GQ.Data and GQ.Data.InvalidateQueryCache then
+        GQ.Data:InvalidateQueryCache()
+    end
+
     if GQ.RefreshUI then
         GQ:RefreshUI()
     end

@@ -2,9 +2,39 @@
 
 Rules for adding, importing, and maintaining gear quest entries in `GearQuest/Data.lua`. Follow these when curating data from Wowhead, in-game research, or leveling guides.
 
+## Data sources (read this first)
+
+GearQuest uses **two different pipelines**. Do not apply one pipeline’s rules to the other.
+
+| Source | Levels | Classes | How it gets in | Authoritative doc |
+|--------|--------|---------|----------------|-------------------|
+| **Curated** (`Data.lua`) | 1–9 Alliance bands, **level 70 all classes**, seasonal/event items | All classes at 70; early Alliance for 1–9 | Manual curation, AtlasLoot Phase 3 import | This file (§ Curation workflow) |
+| **Generated** (`_generated/*.lua` → `DataAdapter.lua`) | **10–69 only** (never 70) | **Paladin** today | Stat-weight pipeline + Wowhead/cmangos | [`GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md`](../GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md) |
+
+**Level 70 is always curated** — Phase 3 AtlasLoot BiS for all 21 specs (~891 entries). The generated pipeline deliberately does **not** produce level 70 (rule R1 in the pipeline doc: sockets, tier, librams, phase gating).
+
+**Paladin 10–69** comes from the generated pipeline (`paladinPicks` + `paladinHorde1to9`). Those rows are merged into `GQ.Data.entries` at load time by `DataAdapter.lua`. Sanity check after wiring:
+
+```powershell
+node scripts/verify-paladin-bis.mjs
+```
+
+Expected total: **1,179 curated + 9,180 paladinPicks + 221 paladinHorde1to9 = 10,580** entries (counts drift — always use the script, not a stale figure).
+
+### Ranking philosophy by source
+
+| Source | What “top 3” means |
+|--------|---------------------|
+| **Curated (early bands, level 70)** | Human judgment: realistic upgrades for that level band, correct armor tier, obtainability considered when hand-picking. |
+| **Generated (Paladin 10–69)** | **Pure stat score** from per-spec weights — obtainability is **not** gated. A level-60 chest can legitimately be a Naxxramas drop if stats win. Procs and suffixes are priced where data exists. |
+
+At **runtime**, `Compare.lua` still ranks visible candidates by item level vs equipped, armor-tier penalties, and small source bonuses — it does **not** re-run the full stat-weight model. Generated rows arrive with `curatedRank` set from the pipeline; curated rows use `curatedRank` from import. **`Compare.lua`’s ≥8 ilvl lower-tier armor rule applies to runtime re-ranking only**, not to how generated picks were chosen (those used armour multipliers in the pipeline).
+
+---
+
 ## Goal
 
-At any given level, show the **top 3 realistic upgrades per slot** for the player's **class, faction, and spec** — nothing they cannot equip, nothing far above their level.
+Show the **top 3 upgrades per slot** for the player’s **class, faction, and spec** — nothing they cannot equip. **How** those three are chosen depends on the data source (see above): curated bands favour realistic, level-appropriate picks; generated Paladin 10–69 favours stat score regardless of obtainability.
 
 ## Curation workflow (primary)
 
@@ -87,9 +117,9 @@ Prefer the **highest armor tier the class can wear** at that level:
 
 **Data rule:** entries for a class/level band should use that class's best tier (mail for a level-4 paladin). Do not add cloth/leather filler unless the item is a genuine stat exception (see below).
 
-**Ranking rule:** `Compare.lua` heavily penalizes lower-tier armor in Head/Chest/Legs/Feet/Hands/Wrist/Waist/Shoulder slots. A cloth or leather piece only appears in the top 3 if its item level is **≥ 8 above** the best preferred-tier option for that slot — meaning it has unusually strong stats for the level/spec. Cloaks (`Back`) and non-armor slots are exempt from armor-tier penalties (cloaks are always cloth).
+**Ranking rule (runtime):** `Compare.lua` heavily penalizes lower-tier armor in Head/Chest/Legs/Feet/Hands/Wrist/Waist/Shoulder slots when re-sorting candidates. A cloth or leather piece only appears in the top 3 if its item level is **≥ 8 above** the best preferred-tier option for that slot. Cloaks (`Back`) and non-armor slots are exempt. **This is not how generated Paladin picks were selected** — see [GEARQUEST-BIS-PIPELINE.md](../GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md) for armour multipliers and stat weights.
 
-Prefer items that are **actually obtainable** at the target level (quest available, vendor visited, materials reachable, dungeon reachable), not theoretical end-of-band BiS from a generic list.
+When **hand-curating** early bands or level 70, prefer items that are **actually obtainable** at the target level (quest available, vendor visited, dungeon reachable). That preference does **not** apply to generated 10–69 Paladin data.
 
 ### Class armor profiles (can wear vs should wear)
 
@@ -213,11 +243,11 @@ maxLevel = 12,  -- last level it is normally shown
 
 | Spec | Selectable | Notes |
 |------|------------|--------|
-| **Retribution** | Yes | Default at level 10+; full leveling BiS path today |
-| **Holy** | No (coming later) | Shown greyed out in the log spec picker; entries may already carry `specs = { holy = true }` |
-| **Protection** | No (coming later) | Same as Holy |
+| **Retribution** | Yes | Default at level 10+ |
+| **Holy** | Yes | Generated + curated data per spec |
+| **Protection** | Yes | Generated + curated data per spec |
 
-When enabling a spec later, remove `comingLater = true` from its row in `GearQuest/Spec.lua` (`CLASS_SPECS`).
+Other classes: spec picker follows `CLASS_SPECS` in `Spec.lua` (`comingLater` where data is not ready).
 
 ### Player controls
 
@@ -302,7 +332,11 @@ Do **not** mention Holy/Protection availability in the message — the picker al
 
 | File | Role |
 |------|------|
-| `GearQuest/Data.lua` | Static entries |
+| `GearQuest/Data.lua` | Curated entries |
+| `GearQuest/DataAdapter.lua` | Merges generated Paladin tables into `entries` at load |
+| `GearQuest/_generated/Data.Paladin.generated.lua` | Generated picks + item facts + notables (10–69) |
+| `GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md` | Generated pipeline rules (stat weights, R1–R9) |
+| `scripts/verify-paladin-bis.mjs` | Post-merge entry count sanity check |
 | `GearQuest/Spec.lua` | Spec definitions, icons, `comingLater`, saved choice, picker filtering |
 | `GearQuest/Log.lua` | Spec icon + arrow UI, spec picker chrome |
 | `GearQuest/Equip.lua` | Equippability, required level, armor tier, spec, level grace |
@@ -597,12 +631,14 @@ Re-run after any `instructions` / `npc` / token-boss edits. Wowhead tooltip API 
 
 | Band | Status |
 |------|--------|
-| **Level 1–21** | Alliance Warrior & Paladin only; ~192 Alliance-locked + faction-agnostic entries |
-| **Level 22–69** | **Empty** for all classes |
-| **Level 70** | **21 Phase 3 specs** (~890 entries), all classes represented in AtlasLoot menu |
-| **Horde leveling** | No Horde-specific entries yet (faction-agnostic items still show) |
+| **Level 1–9 Alliance** | Curated Warrior & Paladin; ~192 Alliance-locked + faction-agnostic entries |
+| **Level 1–9 Horde Paladin** | Generated (`paladinHorde1to9`) |
+| **Level 10–69 Paladin** | Generated (`paladinPicks`) — all three specs, both factions |
+| **Level 10–69 other classes** | Empty (generated pipeline not run yet) |
+| **Level 70** | Curated Phase 3 BiS — **all 21 specs**, all classes (~891 entries) |
+| **Horde leveling (non-Paladin)** | Faction-agnostic curated items still show; no Horde-specific generated bands yet |
 
-Empty Neck / Trinket / Head slots while leveling usually mean **missing data**, not a broken addon. Level 70 ranged/totem slots are populated for classes in the P3 import.
+Empty Neck / Trinket / Head slots while leveling usually mean **missing data** for that class/band, not a broken addon.
 
 ---
 
@@ -636,7 +672,8 @@ Classic **Phase 6 (Naxx)** BiS is **not** in the Hoizame AtlasLoot zip. AtlasLoo
 - `GET_ITEM_INFO_RECEIVED` registered on multiple frames without central debouncing (login/zoning cost)
 - Quest-log reward arrows use retail frame names (likely inert on TBC 2.5)
 - `Indicator.lua` `GetChildren()` unpacking; trainer frame allocation churn
-- Levels 22–69 and Horde leveling data
+- Generated BiS for classes other than Paladin (10–69)
+- Repo root `_paladin-bis-extract/` is a superseded merge bundle — safe to delete; canonical files live under `GearQuest/_generated/`
 
 ### Code review reference
 

@@ -2,8 +2,30 @@ local _, GQ = ...
 
 GQ.Minimap = GQ.Minimap or {}
 
+local MINIMAP_TEXTURE = "Interface\\AddOns\\GearQuest\\Art\\GearQuest-Icon"
+local MINIMAP_ICON_SIZE = 20
 local BUTTON_SIZE = 31
 local MINIMAP_RADIUS = 80
+
+local function ApplyMinimapIcon(icon)
+    if not icon then
+        return
+    end
+
+    icon:SetTexture(MINIMAP_TEXTURE)
+    icon:SetTexCoord(0, 1, 1, 0)
+end
+
+local function EnsureMinimapIcon(button)
+    if not button.gqIcon then
+        button.gqIcon = button:CreateTexture(nil, "BACKGROUND")
+        button.gqIcon:SetSize(MINIMAP_ICON_SIZE, MINIMAP_ICON_SIZE)
+        button.gqIcon:SetPoint("CENTER", 0, 1)
+    end
+
+    ApplyMinimapIcon(button.gqIcon)
+    return button.gqIcon
+end
 
 local function GetAngle()
     GearQuestDB.settings = GearQuestDB.settings or {}
@@ -46,6 +68,7 @@ function GQ.Minimap:Init()
     if self.button or _G.GearQuestMinimapButton then
         self.button = self.button or _G.GearQuestMinimapButton
         if self.button then
+            EnsureMinimapIcon(self.button)
             self.button:SetScript("OnClick", function()
                 local gq = _G.GearQuest
                 if gq and gq.Log then
@@ -71,10 +94,7 @@ function GQ.Minimap:Init()
     overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
     overlay:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
 
-    local icon = button:CreateTexture(nil, "BACKGROUND")
-    icon:SetSize(20, 20)
-    icon:SetPoint("CENTER", 0, 1)
-    icon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
+    EnsureMinimapIcon(button)
 
     RegisterButtonClicks(button)
     button:RegisterForDrag("LeftButton")

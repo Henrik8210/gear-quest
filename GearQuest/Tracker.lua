@@ -23,6 +23,29 @@ local SCROLLBAR_PAD = 2
 local SCROLLBAR_HIDE_DELAY = 1.2
 local SCROLLBAR_MIN_THUMB = 18
 local SCROLL_STEP = 24
+
+local function WireTrackerHoverRegion(region)
+    if not region or region.gqTrackerHoverWired then
+        return
+    end
+
+    region.gqTrackerHoverWired = true
+    if region.EnableMouse then
+        region:EnableMouse(true)
+    end
+
+    region:HookScript("OnEnter", function()
+        local tracker = GQ.Tracker
+        tracker.trackerHoverCount = (tracker.trackerHoverCount or 0) + 1
+        tracker:UpdateResizeHandleVisibility()
+    end)
+
+    region:HookScript("OnLeave", function()
+        local tracker = GQ.Tracker
+        tracker.trackerHoverCount = math.max(0, (tracker.trackerHoverCount or 0) - 1)
+        tracker:UpdateResizeHandleVisibility()
+    end)
+end
 local ROW_TOOLTIP_STILL_DELAY = 3
 local ROW_TOOLTIP_MOVE_THRESHOLD = 1
 local COLLAPSE_BUTTON_SIZE = 16
@@ -319,6 +342,33 @@ function GQ.Tracker:UpdateCollapseButton()
     )
 end
 
+function GQ.Tracker:EnsureTrackerHoverWiring()
+    if not self.frame or self.trackerHoverWired then
+        return
+    end
+
+    self.trackerHoverWired = true
+    WireTrackerHoverRegion(self.frame)
+    WireTrackerHoverRegion(self.scroll)
+    WireTrackerHoverRegion(self.contentInner)
+    WireTrackerHoverRegion(self.collapseBtn)
+    WireTrackerHoverRegion(self.dragHandle)
+    WireTrackerHoverRegion(self.resizeHandle)
+    if self.scrollBar then
+        WireTrackerHoverRegion(self.scrollBar)
+    end
+    if self.scrollThumb then
+        WireTrackerHoverRegion(self.scrollThumb)
+    end
+    if self.entryRows then
+        for _, row in ipairs(self.entryRows) do
+            WireTrackerHoverRegion(row)
+        end
+    end
+
+    self:UpdateResizeHandleVisibility()
+end
+
 function GQ.Tracker:UpdateCollapseVisuals()
     local collapsed = self:IsCollapsed()
 
@@ -337,13 +387,38 @@ function GQ.Tracker:UpdateCollapseVisuals()
         self:StopResize()
     end
 
-    if self.resizeHandle then
-        if collapsed then
-            self.resizeHandle:Hide()
-        else
-            self.resizeHandle:Show()
-        end
+    self:UpdateResizeHandleVisibility()
+end
+
+function GQ.Tracker:UpdateResizeHandleVisibility()
+    if not self.resizeHandle then
+        return
     end
+
+    if self:IsCollapsed() then
+        self.resizeHandle:Hide()
+        return
+    end
+
+    local show = self.sizing
+        or self.resizeHandleHover
+        or (self.trackerHoverCount or 0) > 0
+
+    if show then
+        self.resizeHandle:Show()
+    else
+        self.resizeHandle:Hide()
+    end
+end
+
+function GQ.Tracker:TrackerHoverEnter()
+    self.trackerHoverCount = (self.trackerHoverCount or 0) + 1
+    self:UpdateResizeHandleVisibility()
+end
+
+function GQ.Tracker:TrackerHoverLeave()
+    self.trackerHoverCount = math.max(0, (self.trackerHoverCount or 0) - 1)
+    self:UpdateResizeHandleVisibility()
 end
 
 function GQ.Tracker:EnsureCollapseButton(frame)
@@ -429,9 +504,9 @@ function GQ.Tracker:LayoutEntries(entries, descWordLimit)
         local row = self.entryRows[i]
         if row.cachedEntryId ~= entry.id or not row.cachedItemName then
             row.cachedEntryId = entry.id
-            row.cachedItemName = GetItemInfo(entry.itemId) or ("Item " .. entry.itemId)
+            row.cachedItemName = GQ.Data:GetEntryDisplayName(entry) or ("Item " .. entry.itemId)
         elseif row.cachedItemName:match("^Item %d+$") then
-            local resolved = GetItemInfo(entry.itemId)
+            local resolved = GQ.Data:GetEntryDisplayName(entry)
             if resolved then
                 row.cachedItemName = resolved
             end
@@ -626,6 +701,7 @@ function GQ.Tracker:EnsureEntryRows(count)
         end)
 
         self.entryRows[index] = row
+        WireTrackerHoverRegion(row)
     end
 
     for i = 1, #self.entryRows do
@@ -898,6 +974,7 @@ function GQ.Tracker:StopResize()
     end
 
     self:HideResizeBorder()
+    self:UpdateResizeHandleVisibility()
 
     if not wasSizing then
         return
@@ -916,6 +993,7 @@ function GQ.Tracker:BeginResize()
 
     self.sizing = true
     self:ShowResizeBorder()
+    self:UpdateResizeHandleVisibility()
     self.frame:StartSizing("BOTTOMRIGHT")
 end
 
@@ -1027,6 +1105,7 @@ function GQ.Tracker:Init()
             self.resizeBorder = CreateResizeBorder(self.frame)
         end
         self:EnsureCollapseButton(self.frame)
+        self:EnsureTrackerHoverWiring()
         self:EnsureScrollBarHideTicker()
         self:Refresh()
         return
@@ -1115,11 +1194,15 @@ function GQ.Tracker:Init()
     resizeHandle:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     resizeHandle:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     resizeHandle:SetScript("OnEnter", function(self)
+        GQ.Tracker.resizeHandleHover = true
+        GQ.Tracker:UpdateResizeHandleVisibility()
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:SetText("Drag to resize", 1, 1, 1)
         GameTooltip:Show()
     end)
     resizeHandle:SetScript("OnLeave", function()
+        GQ.Tracker.resizeHandleHover = false
+        GQ.Tracker:UpdateResizeHandleVisibility()
         GameTooltip:Hide()
     end)
     resizeHandle:SetScript("OnMouseDown", function(_, button)
@@ -1168,5 +1251,6 @@ function GQ.Tracker:Init()
     self.itemInfoListener = listener
 
     self:UpdateCollapseButton()
+    self:EnsureTrackerHoverWiring()
     self:Refresh()
 end
