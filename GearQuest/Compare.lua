@@ -84,6 +84,14 @@ function GQ.Compare:ScoreEntry(entry, equippedIlvl, slotName, maxPreferredIlvl)
     return upgradeDelta * 10 + sourceBonus + armorPenalty, itemIlvl
 end
 
+-- Classes whose generated picks are fully stat-weighted in the pipeline; runtime
+-- ilvl re-ranking would wrongly promote high-dps staves/wands over stat sticks.
+local PIPELINE_RANK_CLASSES = {
+    PRIEST = true,
+    MAGE = true,
+    WARLOCK = true,
+}
+
 function GQ.Compare:RankEntries(entries, slotName, maxResults)
     maxResults = maxResults or 3
     local equippedIlvl = self:GetEquippedItemLevel(slotName)
@@ -113,7 +121,13 @@ function GQ.Compare:RankEntries(entries, slotName, maxResults)
         if entry.origin == "guide" then
             return true
         end
-        return not entry.generated
+        if not entry.generated then
+            return true
+        end
+        if PIPELINE_RANK_CLASSES[classFile] then
+            return true
+        end
+        return false
     end
 
     table.sort(scored, function(a, b)

@@ -66,6 +66,14 @@ local SOURCES = {
               subtlety      = { subtlety      = true } } },
   { class = "ROGUE",   picks = "rogueEarly1to9",   facts = "rogueEarly1to9Facts",
     hasSpec = false, factionInRow = true },
+
+  { class = "PRIEST",  picks = "priestPicks",      facts = "priestItemFacts",
+    hasSpec = true,
+    specs = { holy       = { holy       = true },
+              discipline = { discipline = true },
+              shadow     = { shadow     = true } } },
+  { class = "PRIEST",  picks = "priestEarly1to9",  facts = "priestEarly1to9Facts",
+    hasSpec = false, factionInRow = true },
 }
 
 local CLASSTBL = {}
@@ -84,10 +92,22 @@ local function Expand(src, data, out)
         local itemId = r[1]
         local f = facts[itemId]
         if f then
-            local spec    = src.hasSpec and r[6] or nil
-            local faction = src.hasSpec and r[7]
-                            or (src.factionInRow and r.faction)
-                            or src.faction
+            local rank, spec, faction
+            if src.hasSpec then
+                if type(r[5]) == "number" then
+                    rank = r[5]
+                    spec = r[6]
+                    faction = r[7]
+                else
+                    spec = r[5]
+                    faction = r[6]
+                    rank = r.rank or 4
+                end
+            else
+                rank = r[5]
+                spec = nil
+                faction = src.factionInRow and r.faction or src.faction
+            end
             out[#out + 1] = {
                 id           = prefix .. itemId .. ":" .. r[2] .. ":" .. r[3]
                                  .. ":" .. tostring(spec) .. ":" .. tostring(faction),
@@ -95,7 +115,7 @@ local function Expand(src, data, out)
                 slot         = r[2],
                 minLevel     = r[3],
                 maxLevel     = r[4],
-                curatedRank  = r[5],
+                curatedRank  = rank,
                 classes      = classes,
                 specs        = spec and src.specs and src.specs[spec] or nil,
                 factions     = faction and FACTION[faction] or nil,
@@ -210,7 +230,7 @@ function GQ.Data:BuildSuffixLookup()
 
     local notableTables = {
         "paladinNotable", "warriorNotable", "hunterNotable",
-        "druidNotable", "shamanNotable", "rogueNotable",
+        "druidNotable", "shamanNotable", "rogueNotable", "priestNotable",
     }
     for t = 1, #notableTables do
         local rows = self[notableTables[t]]

@@ -50,13 +50,52 @@ local function RegisterButtonClicks(button)
         return
     end
 
-    if pcall(function() button:RegisterForClicks("AnyUp") end) then
-        return
-    end
-    if pcall(function() button:RegisterForClicks(false, "LeftButtonUp", "RightButtonUp") end) then
+    if pcall(function() button:RegisterForClicks("LeftButtonUp", "RightButtonUp") end) then
         return
     end
     pcall(function() button:RegisterForClicks("LeftButton", "RightButton") end)
+end
+
+local function IsRightClick(mouseButton)
+    return mouseButton == "RightButton" or mouseButton == "RightButtonUp"
+end
+
+local function IsLeftClick(mouseButton)
+    return mouseButton == "LeftButton" or mouseButton == "LeftButtonUp" or mouseButton == nil
+end
+
+local function OpenSimulateDialog(button)
+    local gq = _G.GearQuest
+    if gq and gq.Preview and gq.Preview.ShowDialog then
+        gq.Preview:ShowDialog(button)
+    end
+end
+
+local function OnMinimapClick(button, mouseButton)
+    local gq = _G.GearQuest
+    if not gq then
+        return
+    end
+
+    if IsRightClick(mouseButton) then
+        OpenSimulateDialog(button)
+        return
+    end
+
+    if IsLeftClick(mouseButton) and gq.Log then
+        gq.Log:Toggle()
+    end
+end
+
+local function WireMinimapButton(button)
+    EnsureMinimapIcon(button)
+    RegisterButtonClicks(button)
+    button:SetScript("OnClick", OnMinimapClick)
+    button:SetScript("OnMouseUp", function(self, mouseButton)
+        if IsRightClick(mouseButton) then
+            OpenSimulateDialog(self)
+        end
+    end)
 end
 
 function GQ.Minimap:Init()
@@ -68,13 +107,7 @@ function GQ.Minimap:Init()
     if self.button or _G.GearQuestMinimapButton then
         self.button = self.button or _G.GearQuestMinimapButton
         if self.button then
-            EnsureMinimapIcon(self.button)
-            self.button:SetScript("OnClick", function()
-                local gq = _G.GearQuest
-                if gq and gq.Log then
-                    gq.Log:Toggle()
-                end
-            end)
+            WireMinimapButton(self.button)
         end
         return
     end
@@ -94,17 +127,8 @@ function GQ.Minimap:Init()
     overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
     overlay:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
 
-    EnsureMinimapIcon(button)
-
-    RegisterButtonClicks(button)
+    WireMinimapButton(button)
     button:RegisterForDrag("LeftButton")
-
-    button:SetScript("OnClick", function()
-        local gq = _G.GearQuest
-        if gq and gq.Log then
-            gq.Log:Toggle()
-        end
-    end)
 
     button:SetScript("OnDragStart", function(self)
         self:LockHighlight()
@@ -126,8 +150,9 @@ function GQ.Minimap:Init()
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:SetText("GearQuest", 1, 1, 1)
-        GameTooltip:AddLine("Click to open the hunt log.", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Drag to move icon.", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Left-click: open the hunt log.", 1, 0.82, 0)
+        GameTooltip:AddLine("Right-click: simulate another class or level.", 1, 0.82, 0)
+        GameTooltip:AddLine("Drag to move icon.", 1, 0.82, 0)
         GameTooltip:Show()
     end)
 

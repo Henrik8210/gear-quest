@@ -79,8 +79,8 @@ function GQ:PLAYER_LOGIN()
     end
 
     local previewNote = self.Preview:IsEnabled() and (" (" .. self:GetPreviewLabel() .. ")") or ""
-    print("|cff66ccffGearQuest|r v" .. self.VERSION .. " loaded" .. previewNote .. ". Right-click a gear slot on your character panel, or |cff00ff00/gq|r.")
-    print("|cff66ccffGearQuest|r: Configure test character with |cff00ff00/gq set|r (class, level, faction).")
+    print("|cff66ccffGearQuest|r v" .. self.VERSION .. " By Weber8210 loaded" .. previewNote .. ". Right-click a gear slot on your character panel, or |cff00ff00/gq|r.")
+    print("|cff66ccffGearQuest|r: Right-click the minimap icon to simulate another level, class, or spec.")
     self:CheckLevelMilestones(nil, self:GetEffectiveLevel())
     self.Log:ScheduleAutoCompletionCheck()
 end

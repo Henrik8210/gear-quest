@@ -9,17 +9,17 @@ GearQuest uses **two different pipelines**. Do not apply one pipeline’s rules 
 | Source | Levels | Classes | How it gets in | Authoritative doc |
 |--------|--------|---------|----------------|-------------------|
 | **Curated** (`Data.lua`) | 1–9 Alliance bands, **level 70 all classes**, seasonal/event items | All classes at 70; early Alliance for 1–9 | Manual curation, AtlasLoot Phase 3 import | This file (§ Curation workflow) |
-| **Generated** (`_generated/*.lua` → `DataAdapter.lua`) | **10–69 only** (never 70) | **Paladin** today | Stat-weight pipeline + Wowhead/cmangos | [`GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md`](../GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md) |
+| **Generated** (`_generated/*.lua` → `DataAdapter.lua`) | **10–69 only** (never 70) | **Seven classes** (Paladin, Warrior, Hunter, Druid, Shaman, Rogue, Priest) | Stat-weight pipeline + Wowhead/cmangos | [`GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md`](../GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md) |
 
-**Level 70 is always curated** — Phase 3 AtlasLoot BiS for all 21 specs (~891 entries). The generated pipeline deliberately does **not** produce level 70 (rule R1 in the pipeline doc: sockets, tier, librams, phase gating).
+**Level 70 is always curated** — Phase 3 AtlasLoot BiS for the original **21** imported specs, plus **six stand-in copies** (Discipline, Frost, Affliction, Demonology, Assassination, Subtlety) via `scripts/clone-level70-specs.mjs`. Stand-ins share gear pools with their source spec; rogue weapons differ for dagger specs. **Hunter Marksmanship** still has no level-70 band. The generated pipeline deliberately does **not** produce level 70 (rule R1 in the pipeline doc: sockets, tier, librams, phase gating).
 
-**Paladin 10–69** comes from the generated pipeline (`paladinPicks` + `paladinHorde1to9`). Those rows are merged into `GQ.Data.entries` at load time by `DataAdapter.lua`. Sanity check after wiring:
+**Paladin 10–69** comes from the generated pipeline (`paladinPicks` + `paladinHorde1to9`). All seven classes merge into `GQ.Data.entries` at load time via `DataAdapter.lua`. Sanity check:
 
 ```powershell
-node scripts/verify-paladin-bis.mjs
+node scripts/verify-generated-bis.mjs
 ```
 
-Expected total: **1,179 curated + 9,180 paladinPicks + 221 paladinHorde1to9 = 10,580** entries (counts drift — always use the script, not a stale figure).
+Expected total: **55,355** entries (**1,439 curated + 53,916 generated**) — always use the script, not a stale figure.
 
 ### Ranking philosophy by source
 
@@ -28,7 +28,7 @@ Expected total: **1,179 curated + 9,180 paladinPicks + 221 paladinHorde1to9 = 10
 | **Curated (early bands, level 70)** | Human judgment: realistic upgrades for that level band, correct armor tier, obtainability considered when hand-picking. |
 | **Generated (all classes 10–69)** | **Pure stat score** from per-spec weights — obtainability is **not** gated beyond faction/rep/vendor locks in the pipeline. A level-60 chest can legitimately be a Naxxramas drop if stats win. Procs and suffixes are priced where data exists. |
 
-At **runtime**, `Compare.lua` ranks most generated candidates by item level vs equipped, armor-tier penalties, and small source bonuses — it does **not** re-run the full stat-weight model. Generated rows arrive with `curatedRank` from the pipeline; hand-curated rows keep author rank. **Exception:** bands with `origin="guide"` (level-60 guide tiers) **must never be re-sorted by score** — `curatedRank` is authoritative there; score is context only (e.g. Best vs Best Mitigation). **`Compare.lua`’s ≥8 ilvl lower-tier armor rule applies to runtime re-ranking only**, not to how generated picks were chosen (those used armour multipliers in the pipeline).
+At **runtime**, `Compare.lua` ranks most generated candidates by item level vs equipped, armor-tier penalties, and small source bonuses — it does **not** re-run the full stat-weight model. Generated rows arrive with `curatedRank` from the pipeline; hand-curated rows keep author rank. **Exceptions:** (1) bands with `origin="guide"` (level-60 guide tiers) **must never be re-sorted by score**; (2) **Priest, Mage, and Warlock** always keep pipeline `curatedRank` (weapon pairing — staff vs 1H+off-hand). **`Compare.lua`’s ≥8 ilvl lower-tier armor rule applies to runtime re-ranking only**, not to how generated picks were chosen (those used armour multipliers in the pipeline).
 
 **Faction gating (pipeline):** wrong-faction rows are stripped at emit time using vendor stock analysis (`npc_faction.json`), PvP prefix rules (`pvp_prefix_faction.json`), reputation exclusivity (mirror pairs + hand-verified names like Tranquillien), and quest/class locks on adjacent rows — **not** sub-zone lists alone (shared camps can host both factions’ vendors).
 
@@ -269,7 +269,18 @@ maxLevel = 12,  -- last level it is normally shown
 | **Holy** | Yes | Generated + curated data per spec |
 | **Protection** | Yes | Generated + curated data per spec |
 
-Other classes: spec picker follows `CLASS_SPECS` in `Spec.lua` (`comingLater` where data is not ready).
+Other classes: all specs in `CLASS_SPECS` are selectable when data exists; `comingLater` is only used while a spec truly has no backing data.
+
+### Preview / simulate (class, level, spec)
+
+Players can browse another class/level/spec without changing their character:
+
+| Method | Action |
+|--------|--------|
+| **Minimap** | **Right-click** GearQuest minimap icon → simulate panel (class, specialization, level 1–70). **Left-click** opens the log. **Reset** = `/gq set me`. |
+| **Chat** | `/gq class hunter`, `/gq level 37`, `/gq spec holy`, `/gq set on` / `/gq set off`, `/gq set me` |
+
+Preview state lives in `GearQuestDB.settings.preview` (class, level, faction, `specByClass`). Spec choice in preview does not overwrite the live character’s saved spec.
 
 ### Player controls
 
@@ -356,10 +367,11 @@ Do **not** mention Holy/Protection availability in the message — the picker al
 |------|------|
 | `GearQuest/Data.lua` | Curated entries |
 | `GearQuest/DataAdapter.lua` | Merges generated class tables into `entries` at load; suffix lookup/enrichment |
-| `GearQuest/_generated/*.generated.lua` | Generated picks + item facts + notables (10–69, six classes) |
+| `GearQuest/_generated/*.generated.lua` | Generated picks + item facts + notables (10–69, seven classes) |
 | `GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md` | Generated pipeline rules (stat weights, R1–R9) |
 | `docs/SUFFIX-RANDOM-ENCHANT.md` | **Random enchant addon rules** — suffixId matching, negative ids, notables, tooltips |
-| `scripts/verify-generated-bis.mjs` | Post-merge entry count + suffixId spot checks (all six classes) |
+| `scripts/clone-level70-specs.mjs` | Stand-in level-70 curated copies for specs that share gear pools |
+| `scripts/verify-generated-bis.mjs` | Post-merge entry count + suffixId spot checks (all seven classes) |
 | `GearQuest/Spec.lua` | Spec definitions, icons, `comingLater`, saved choice, picker filtering |
 | `GearQuest/Log.lua` | Spec icon + arrow UI, spec picker chrome |
 | `GearQuest/Equip.lua` | Equippability, required level, armor tier, spec, level grace |
@@ -656,11 +668,13 @@ Re-run after any `instructions` / `npc` / token-boss edits. Wowhead tooltip API 
 |------|--------|
 | **Level 1–9 Alliance** | Curated Warrior & Paladin; early generated bands for Hunter, Druid, Shaman, Rogue (`*Early1to9`) |
 | **Level 1–9 Horde** | Generated Horde bands: Paladin (`paladinHorde1to9`), Warrior (`warriorHorde1to9`); early 1–9 for Hunter/Druid/Shaman/Rogue |
-| **Level 10–69 all six classes** | Generated (`*Picks`) — all specs per class, faction-gated rows in pipeline |
-| **Level 70** | Curated Phase 3 BiS — **all 21 specs**, all classes (~891 entries) |
-| **Total** | **48,244** entries (1,178 curated + 47,066 generated) — `node scripts/verify-generated-bis.mjs` |
+| **Level 10–69 all seven classes** | Generated (`*Picks`) — all specs per class, faction-gated rows in pipeline |
+| **Level 70** | Curated Phase 3 BiS — **21** AtlasLoot imports + **6** stand-in copies (27 specs with data); **MM Hunter** gap |
+| **Total** | **55,355** entries (1,439 curated + 53,916 generated) — `node scripts/verify-generated-bis.mjs` |
 
 Empty Neck / Trinket / Head slots while leveling usually mean **missing data** for that class/band, not a broken addon.
+
+**Open (addon UI):** Hunter/enhancement shaman can show a two-hander as #1 MainHand and dual-wield off-hand picks at the same time — the guide lists both routes; the addon should label or grey incompatible pairs (see weapon-slots note).
 
 ---
 
@@ -689,12 +703,15 @@ Classic **Phase 6 (Naxx)** BiS is **not** in the Hoizame AtlasLoot zip. AtlasLoo
 | `Log.lua` | `arrowBtn` undefined → duplicate spec arrow | Removed bad assignment |
 | Pipeline | Faction/rep leaks in generated 10–69 (BG sets, Tranquillien, mirrored reps) | Vendor/rep emit gates; `npc_faction.json` |
 | `Compare.lua` | Level-60 guide bands re-sorted by runtime score | `origin="guide"` keeps pipeline `curatedRank` |
+| `Compare.lua` | Priest staff lost to ilvl vs 1H+off-hand | Pipeline rank preserved for Priest/Mage/Warlock |
 | `Data.lua` | Rogue item facts missing from `GetItemFact` | Added `rogueItemFacts` / `rogueEarly1to9Facts` |
+| `Preview.lua` / `Minimap.lua` | Preview only via slash commands | Right-click minimap simulate panel (class/spec/level) |
 
 ### Open (not yet addressed)
 
 - Hunt state is **account-wide** (`SavedVariables`, not per-character) — `/gq wipe data` wording may mislead
 - Tracker shows tracked hunts without re-checking current class/faction (cross-class hunts can linger)
+- Hunter/enhancement shaman may show unequippable two-hand + off-hand weapon pairs at level 60 (data keeps both guide routes; needs UI labelling)
 - `GET_ITEM_INFO_RECEIVED` registered on multiple frames without central debouncing (login/zoning cost)
 - Quest-log reward arrows use retail frame names (likely inert on TBC 2.5)
 - `Indicator.lua` `GetChildren()` unpacking; trainer frame allocation churn

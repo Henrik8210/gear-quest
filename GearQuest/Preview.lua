@@ -210,7 +210,7 @@ function GQ.Preview:PrintNowViewing()
         specSuffix = string.format(", %s", GQ.Spec:GetSelectedSpecLabel())
     end
     print(string.format(
-        "|cff66ccffGearQuest|r: Now viewing upgrades as a |cff00ff00level %d %s|r (%s%s).",
+        "|cff66ccffGearQuest|r: Now viewing upgrades as a |cff00ff00level %d %s|r (%s%s). Right-click a gear slot on your character panel, or |cff00ff00/gq|r.",
         preview.level,
         self:FormatClassName(preview.class),
         preview.faction,
@@ -367,6 +367,369 @@ function GQ.Preview:HandleCommand(msg)
     end
 
     self:PrintStatus()
+end
+
+-- --- Simulate dialog (minimap right-click) ---
+
+local SIM_DIALOG_WIDTH = 280
+local SIM_DIALOG_HEIGHT = 226
+local METAL_EDGE = "Interface\\Tooltips\\UI-Tooltip-Border"
+
+local CLASS_ORDER = {
+    "WARRIOR",
+    "PALADIN",
+    "HUNTER",
+    "ROGUE",
+    "PRIEST",
+    "SHAMAN",
+    "MAGE",
+    "WARLOCK",
+    "DRUID",
+}
+
+local function ApplySimDialogChrome(frame)
+    if not frame.blackBg then
+        local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.02, 0.02, 0.02, 1)
+        frame.blackBg = bg
+    end
+
+    if frame.SetBackdrop then
+        frame:SetBackdrop({
+            edgeFile = METAL_EDGE,
+            tile = true,
+            tileSize = 16,
+            edgeSize = 12,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+    end
+end
+
+local function SanitizeLevelInput(edit)
+    if not edit then
+        return ""
+    end
+
+    local text = edit:GetText() or ""
+    text = text:gsub("%D", "")
+    if text == "" then
+        if text ~= edit:GetText() then
+            edit:SetText("")
+        end
+        return ""
+    end
+
+    local level = tonumber(text)
+    if level and level > 70 then
+        text = "70"
+    end
+
+    if text ~= edit:GetText() then
+        edit:SetText(text)
+        edit:SetCursorPosition(#text)
+    end
+
+    return text
+end
+
+local function GetDialogSpecOptions(classFile)
+    if not GQ.Spec then
+        return {}
+    end
+
+    local options = GQ.Spec:GetOptions(classFile) or {}
+    local selectable = {}
+    for _, opt in ipairs(options) do
+        if GQ.Spec:IsSpecSelectable(opt.id, classFile) then
+            table.insert(selectable, opt)
+        end
+    end
+    return selectable
+end
+
+local function PickDialogSpec(classFile)
+    if not GQ.Spec or not GQ.Spec:HasSpecs(classFile) then
+        return nil
+    end
+
+    local saved = GQ.Spec:GetSavedSpec(classFile)
+    if saved and GQ.Spec:IsSpecSelectable(saved, classFile) then
+        return saved
+    end
+
+    return GQ.Spec:GetDefaultSpec(classFile)
+end
+
+function GQ.Preview:RefreshDialogSpecDropdown()
+    local dialog = self.dialog
+    if not dialog or not dialog.specDrop then
+        return
+    end
+
+    local classFile = dialog.selectedClass
+    local options = GetDialogSpecOptions(classFile)
+
+    if #options == 0 then
+        dialog.specLabel:Hide()
+        dialog.specDrop:Hide()
+        dialog.selectedSpec = nil
+        UIDropDownMenu_SetText(dialog.specDrop, "—")
+        return
+    end
+
+    local valid = false
+    for _, opt in ipairs(options) do
+        if opt.id == dialog.selectedSpec then
+            valid = true
+            break
+        end
+    end
+    if not valid then
+        dialog.selectedSpec = PickDialogSpec(classFile)
+    end
+
+    dialog.specLabel:Show()
+    dialog.specDrop:Show()
+
+    local label = "Specialization"
+    for _, opt in ipairs(options) do
+        if opt.id == dialog.selectedSpec then
+            label = opt.label
+            break
+        end
+    end
+
+    UIDropDownMenu_SetSelectedValue(dialog.specDrop, dialog.selectedSpec)
+    UIDropDownMenu_SetText(dialog.specDrop, label)
+    UIDropDownMenu_Initialize(dialog.specDrop, function(_, level)
+        if level ~= 1 then
+            return
+        end
+
+        for _, opt in ipairs(options) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt.label
+            info.value = opt.id
+            info.func = function()
+                dialog.selectedSpec = opt.id
+                UIDropDownMenu_SetSelectedValue(dialog.specDrop, opt.id)
+                UIDropDownMenu_SetText(dialog.specDrop, opt.label)
+            end
+            info.checked = (dialog.selectedSpec == opt.id)
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+end
+
+function GQ.Preview:ApplySimulation(classFile, level, specId)
+    local okClass, errClass = self:SetClass(classFile)
+    if not okClass then
+        return false, errClass
+    end
+
+    local okLevel, errLevel = self:SetLevel(level)
+    if not okLevel then
+        return false, errLevel
+    end
+
+    if specId and GQ.Spec and tonumber(level) and tonumber(level) >= GQ.Spec.TALENT_LEVEL then
+        local okSpec, errSpec = GQ.Spec:SetSelectedSpec(specId, classFile)
+        if not okSpec then
+            return false, errSpec
+        end
+    end
+
+    self:PrintNowViewing()
+    if GQ.RefreshUI then
+        GQ:RefreshUI()
+    end
+    return true
+end
+
+function GQ.Preview:EnsureDialog()
+    if self.dialog then
+        ApplySimDialogChrome(self.dialog)
+        self.dialog:EnableMouse(true)
+        return self.dialog
+    end
+
+    local dialog
+    local ok, framed = pcall(CreateFrame, "Frame", "GearQuestSimulateDialog", UIParent, "BackdropTemplate")
+    if ok and framed then
+        dialog = framed
+    else
+        dialog = CreateFrame("Frame", "GearQuestSimulateDialog", UIParent)
+    end
+
+    dialog:SetSize(SIM_DIALOG_WIDTH, SIM_DIALOG_HEIGHT)
+    dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+    dialog:EnableMouse(true)
+    dialog:Hide()
+    ApplySimDialogChrome(dialog)
+
+    dialog.title = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    dialog.title:SetPoint("TOP", dialog, "TOP", 0, -14)
+    dialog.title:SetWidth(SIM_DIALOG_WIDTH - 48)
+    dialog.title:SetText("Want to see BiS for another level or class?")
+
+    dialog.closeBtn = CreateFrame("Button", nil, dialog, "UIPanelCloseButton")
+    dialog.closeBtn:SetPoint("TOPRIGHT", dialog, "TOPRIGHT", -4, -4)
+    dialog.closeBtn:SetScript("OnClick", function()
+        GQ.Preview:HideDialog()
+    end)
+
+    dialog.classLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    dialog.classLabel:SetPoint("TOPLEFT", dialog, "TOPLEFT", 16, -44)
+    dialog.classLabel:SetText("Class")
+
+    dialog.classDrop = CreateFrame("Frame", "GearQuestSimulateClassDropDown", dialog, "UIDropDownMenuTemplate")
+    dialog.classDrop:SetPoint("TOPLEFT", dialog.classLabel, "BOTTOMLEFT", -16, -4)
+    UIDropDownMenu_SetWidth(dialog.classDrop, 180)
+
+    dialog.specLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    dialog.specLabel:SetPoint("TOPLEFT", dialog.classDrop, "BOTTOMLEFT", 16, -8)
+    dialog.specLabel:SetText("Specialization")
+
+    dialog.specDrop = CreateFrame("Frame", "GearQuestSimulateSpecDropDown", dialog, "UIDropDownMenuTemplate")
+    dialog.specDrop:SetPoint("TOPLEFT", dialog.specLabel, "BOTTOMLEFT", -16, -4)
+    UIDropDownMenu_SetWidth(dialog.specDrop, 180)
+
+    dialog.levelLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    dialog.levelLabel:SetPoint("TOPLEFT", dialog.specDrop, "BOTTOMLEFT", 16, -8)
+    dialog.levelLabel:SetText("Level")
+
+    dialog.levelEdit = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
+    dialog.levelEdit:SetSize(64, 20)
+    dialog.levelEdit:SetPoint("LEFT", dialog.levelLabel, "RIGHT", 12, 0)
+    dialog.levelEdit:SetAutoFocus(false)
+    dialog.levelEdit:SetMaxLetters(2)
+    dialog.levelEdit:SetScript("OnTextChanged", function(self)
+        SanitizeLevelInput(self)
+    end)
+    dialog.levelEdit:SetScript("OnEnterPressed", function()
+        dialog.submit:Click()
+    end)
+    dialog.levelEdit:SetScript("OnEscapePressed", function()
+        GQ.Preview:HideDialog()
+    end)
+
+    dialog.submit = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+    dialog.submit:SetSize(96, 22)
+    dialog.submit:SetPoint("BOTTOMLEFT", dialog, "BOTTOMLEFT", 20, 18)
+    dialog.submit:SetText("Simulate")
+    dialog.submit:SetScript("OnClick", function()
+        local classFile = dialog.selectedClass
+        if not classFile then
+            print("|cff66ccffGearQuest|r: Choose a class.")
+            return
+        end
+
+        local levelText = SanitizeLevelInput(dialog.levelEdit)
+        if levelText == "" then
+            print("|cff66ccffGearQuest|r: Enter a level between 1 and 70.")
+            return
+        end
+
+        local ok, err = GQ.Preview:ApplySimulation(classFile, levelText, dialog.selectedSpec)
+        if ok then
+            GQ.Preview:HideDialog()
+        else
+            print("|cff66ccffGearQuest|r: " .. (err or "Could not simulate."))
+        end
+    end)
+
+    dialog.reset = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+    dialog.reset:SetSize(80, 22)
+    dialog.reset:SetPoint("BOTTOMRIGHT", dialog, "BOTTOMRIGHT", -20, 18)
+    dialog.reset:SetText("Reset")
+    dialog.reset:SetScript("OnClick", function()
+        GQ.Preview:ApplyCurrentCharacter()
+        GQ.Preview:PrintNowViewing()
+        if GQ.RefreshUI then
+            GQ:RefreshUI()
+        end
+        GQ.Preview:RefreshDialogFields()
+    end)
+
+    dialog:SetScript("OnShow", function()
+        GQ.Preview:RefreshDialogFields()
+    end)
+
+    dialog.selectedClass = "PALADIN"
+    dialog.selectedSpec = nil
+    UIDropDownMenu_Initialize(dialog.classDrop, function(_, level)
+        if level ~= 1 then
+            return
+        end
+
+        for _, classFile in ipairs(CLASS_ORDER) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = GQ.Preview:FormatClassName(classFile)
+            info.value = classFile
+            info.func = function()
+                dialog.selectedClass = classFile
+                UIDropDownMenu_SetSelectedValue(dialog.classDrop, classFile)
+                UIDropDownMenu_SetText(dialog.classDrop, GQ.Preview:FormatClassName(classFile))
+                GQ.Preview:RefreshDialogSpecDropdown()
+            end
+            info.checked = (dialog.selectedClass == classFile)
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
+    self.dialog = dialog
+    return dialog
+end
+
+function GQ.Preview:RefreshDialogFields()
+    local dialog = self:EnsureDialog()
+    local classFile = self:GetEffectiveClass()
+    local level = self:GetEffectiveLevel()
+
+    dialog.selectedClass = classFile
+    UIDropDownMenu_SetSelectedValue(dialog.classDrop, classFile)
+    UIDropDownMenu_SetText(dialog.classDrop, self:FormatClassName(classFile))
+
+    if GQ.Spec and level >= GQ.Spec.TALENT_LEVEL then
+        local spec = GQ.Spec:GetEffectiveSpec()
+        if spec and GQ.Spec:IsSpecSelectable(spec, classFile) then
+            dialog.selectedSpec = spec
+        else
+            dialog.selectedSpec = PickDialogSpec(classFile)
+        end
+    else
+        dialog.selectedSpec = PickDialogSpec(classFile)
+    end
+
+    self:RefreshDialogSpecDropdown()
+    dialog.levelEdit:SetText(tostring(level))
+end
+
+function GQ.Preview:HideDialog()
+    if self.dialog then
+        self.dialog:Hide()
+    end
+end
+
+function GQ.Preview:ShowDialog(anchor)
+    local dialog = self:EnsureDialog()
+
+    self:RefreshDialogFields()
+    dialog:ClearAllPoints()
+    if anchor then
+        dialog:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+    else
+        dialog:SetPoint("CENTER")
+    end
+
+    local anchorLevel = anchor and anchor:GetFrameLevel() or 1
+    dialog:SetFrameLevel(anchorLevel + 20)
+    dialog:Show()
+end
+
+function GQ.Preview:ToggleDialog(anchor)
+    self:ShowDialog(anchor)
 end
 
 -- Backwards-compatible helpers used elsewhere in the addon.

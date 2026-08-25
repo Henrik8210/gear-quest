@@ -10,16 +10,13 @@ function read(name) {
 }
 
 function countTableRows(text, tableName) {
-  const marker = `GQ.Data.${tableName} = {`;
-  const start = text.indexOf(marker);
-  if (start < 0) return 0;
-  const slice = text.slice(start);
-  const end = slice.indexOf("\n}");
-  return (slice.slice(0, end).match(/^\s*\{/gm) || []).length;
+  const body = extractTableBody(text, tableName);
+  if (!body) return 0;
+  return (body.match(/^\s*\{/gm) || []).length;
 }
 
 function extractTableBody(text, tableName) {
-  const m = text.match(new RegExp(`GQ\\.Data\\.${tableName} = \\{([\\s\\S]*?)\\n\\}`));
+  const m = text.match(new RegExp(`GQ\\.Data\\.${tableName} = \\{([\\s\\S]*?)\\n\\}(?=\\s*(?:\\n|$|--|GQ\\.Data\\.))`));
   return m?.[1] ?? "";
 }
 
@@ -114,10 +111,25 @@ const SOURCES = [
     factionInRow: true,
     file: "_generated/Data.Rogue.Early.1to9.generated.lua",
   },
+  {
+    class: "PRIEST",
+    picks: "priestPicks",
+    facts: "priestItemFacts",
+    hasSpec: true,
+    file: "_generated/Data.Priest.generated.lua",
+  },
+  {
+    class: "PRIEST",
+    picks: "priestEarly1to9",
+    facts: "priestEarly1to9Facts",
+    hasSpec: false,
+    factionInRow: true,
+    file: "_generated/Data.Priest.Early.1to9.generated.lua",
+  },
 ];
 
-const TARGET_TOTAL = 48244;
-const TARGET_GENERATED = 47066;
+const TARGET_TOTAL = 55355;
+const TARGET_GENERATED = 53916;
 const TARGET_CURATED = TARGET_TOTAL - TARGET_GENERATED;
 
 const dataLua = read("Data.lua");
@@ -178,6 +190,7 @@ console.log("\n=== Relic (Ranged) slot picks ===");
 console.log("paladin:", countRangedPicks("_generated/Data.Paladin.generated.lua", "paladinPicks"));
 console.log("druid:", countRangedPicks("_generated/Data.Druid.generated.lua", "druidPicks"));
 console.log("shaman:", countRangedPicks("_generated/Data.Shaman.generated.lua", "shamanPicks"));
+console.log("priest:", countRangedPicks("_generated/Data.Priest.generated.lua", "priestPicks"));
 
 const shamanBody = extractTableBody(read("_generated/Data.Shaman.generated.lua"), "shamanPicks");
 const shamanEarlyBody = extractTableBody(
@@ -203,6 +216,16 @@ const druidEarlyRows = druidEarlyBody.match(/^\s*\{[^}]+\},?/gm) || [];
 console.log(
   "druidEarly1to9 rows missing faction:",
   druidEarlyRows.filter((line) => !line.includes('faction="')).length,
+);
+
+const priestEarlyBody = extractTableBody(
+  read("_generated/Data.Priest.Early.1to9.generated.lua"),
+  "priestEarly1to9",
+);
+const priestEarlyRows = priestEarlyBody.match(/^\s*\{[^}]+\},?/gm) || [];
+console.log(
+  "priestEarly1to9 rows missing faction:",
+  priestEarlyRows.filter((line) => !line.includes('faction="')).length,
 );
 
 let maxLevel = 0;
@@ -241,8 +264,16 @@ if (shamanEarlyRows.filter((line) => !line.includes('faction="')).length > 0) {
   console.error("\nFAIL: shaman early rows missing faction");
   exitCode = 1;
 }
+if (priestEarlyRows.filter((line) => !line.includes('faction="')).length > 0) {
+  console.error("\nFAIL: priest early rows missing faction");
+  exitCode = 1;
+}
 if (countRangedPicks("_generated/Data.Shaman.generated.lua", "shamanPicks") === 0) {
   console.error("\nFAIL: shaman relic slot empty");
+  exitCode = 1;
+}
+if (countRangedPicks("_generated/Data.Priest.generated.lua", "priestPicks") === 0) {
+  console.error("\nFAIL: priest wand slot empty");
   exitCode = 1;
 }
 
@@ -278,7 +309,7 @@ for (const src of SOURCES) {
     if (/suffixId=/.test(row[0])) withSuffixId++;
   }
 }
-const notableTables = ["paladinNotable", "warriorNotable", "hunterNotable", "druidNotable", "shamanNotable", "rogueNotable"];
+const notableTables = ["paladinNotable", "warriorNotable", "hunterNotable", "druidNotable", "shamanNotable", "rogueNotable", "priestNotable"];
 for (const tableName of notableTables) {
   for (const file of fs.readdirSync(path.join(root, "_generated")).filter((f) => f.endsWith(".generated.lua"))) {
     const body = extractTableBody(read("_generated/" + file), tableName);

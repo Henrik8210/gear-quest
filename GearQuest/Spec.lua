@@ -50,13 +50,13 @@ GQ.Spec.CLASS_SPECS = {
         { id = "restoration", label = "Restoration", icon = "Interface\\Icons\\Spell_Nature_MagicImmunity" },
     },
     MAGE = {
-        { id = "frost", label = "Frost", icon = "Interface\\Icons\\Spell_Frost_FrostBolt02", default = true, comingLater = true },
+        { id = "frost", label = "Frost", icon = "Interface\\Icons\\Spell_Frost_FrostBolt02", default = true },
         { id = "arcane", label = "Arcane", icon = "Interface\\Icons\\Spell_Holy_ArcaneIntellect" },
         { id = "fire", label = "Fire", icon = "Interface\\Icons\\Spell_Fire_FireBolt02" },
     },
     WARLOCK = {
-        { id = "affliction", label = "Affliction", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", default = true, comingLater = true },
-        { id = "demonology", label = "Demonology", icon = "Interface\\Icons\\Spell_Shadow_SummonFelHunter", comingLater = true },
+        { id = "affliction", label = "Affliction", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", default = true },
+        { id = "demonology", label = "Demonology", icon = "Interface\\Icons\\Spell_Shadow_SummonFelHunter" },
         { id = "destruction", label = "Destruction", icon = "Interface\\Icons\\Spell_Shadow_RainOfFire" },
     },
     DRUID = {
