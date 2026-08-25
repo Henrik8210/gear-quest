@@ -13,6 +13,16 @@ Equip.lua
 Data.lua
 _generated\Data.Paladin.generated.lua
 _generated\Data.Paladin.Horde.1to9.generated.lua
+_generated\Data.Warrior.generated.lua
+_generated\Data.Warrior.Horde.1to9.generated.lua
+_generated\Data.Hunter.generated.lua
+_generated\Data.Hunter.Early.1to9.generated.lua
+_generated\Data.Druid.generated.lua
+_generated\Data.Druid.Early.1to9.generated.lua
+_generated\Data.Shaman.generated.lua
+_generated\Data.Shaman.Early.1to9.generated.lua
+_generated\Data.Rogue.generated.lua
+_generated\Data.Rogue.Early.1to9.generated.lua
 DataAdapter.lua
 Compare.lua
 Indicator.lua

@@ -86,9 +86,6 @@ local PROFESSION_ITEM_NAMES = {
 local MIDSUMMER_CROWN =
     "During the Midsummer Fire Festival, complete A Thief's Reward in a capital city after stealing the opposing faction's bonfire flames (or turn in if you finished in a previous year). Usable from level 1."
 
-local MIDSUMMER_MANTLE =
-    "During the Midsummer Fire Festival, complete the Wild Fires quest chain on your home continent (Wild Fires in the Eastern Kingdoms for Alliance, Wild Fires in Kalimdor for Horde). Two armor like the crown — usable from level 1."
-
 GQ.Data.entries = {
     -- Head — all classes / factions (seasonal)
     {
@@ -102,20 +99,6 @@ GQ.Data.entries = {
         instructions = MIDSUMMER_CROWN,
         zone = "Capital Cities",
         questName = "A Thief's Reward",
-    },
-
-    -- Shoulder — all classes / factions (seasonal)
-    {
-        id = "early4_all_shoulder_mantle_fire_festival",
-        itemId = 23324,
-        slot = "Shoulder",
-        minLevel = EARLY_MIN,
-        maxLevel = EARLY_MAX,
-        curatedRank = 1,
-        sourceType = "seasonal_quest",
-        instructions = MIDSUMMER_MANTLE,
-        zone = "Capital Cities",
-        questName = "Wild Fires",
     },
 
     -- Level 1 band — Alliance mail melee (warrior / paladin)
@@ -2246,7 +2229,9 @@ GQ.Data.entries = {
         factions = ALLIANCE,
         curatedRank = 2,
         sourceType = "world_drop",
-        instructions = "Charger's Pants (req 6) are a green mail world drop in starter zones (101 armor, random stats).",
+        suffix = "of Strength",
+        suffixChance = 10.0,
+        instructions = "Charger's Pants of Strength (req 6) are a green mail world drop in starter zones (101 armor, +1–2 Strength). Hunt the of Strength roll.",
         zone = "Elwynn Forest",
     },
     {
@@ -16728,6 +16713,34 @@ function GQ.Data:GetEntriesByItemId(itemId)
     return self.byItemId and self.byItemId[itemId] or {}
 end
 
+function GQ.Data:GetItemFact(itemId)
+    if not itemId then
+        return nil
+    end
+
+    local tables = {
+        self.itemFacts,
+        self.warriorItemFacts,
+        self.hunterItemFacts,
+        self.druidItemFacts,
+        self.shamanItemFacts,
+        self.paladinHorde1to9Facts,
+        self.warriorHorde1to9Facts,
+        self.hunterEarly1to9Facts,
+        self.druidEarly1to9Facts,
+        self.shamanEarly1to9Facts,
+    }
+
+    for i = 1, #tables do
+        local fact = tables[i] and tables[i][itemId]
+        if fact then
+            return fact
+        end
+    end
+
+    return nil
+end
+
 function GQ.Data:GetItemDisplayName(itemId)
     if not itemId then
         return nil
@@ -16736,6 +16749,11 @@ function GQ.Data:GetItemDisplayName(itemId)
     local name = GetItemInfo(itemId)
     if name then
         return name
+    end
+
+    local fact = self:GetItemFact(itemId)
+    if fact and fact.name then
+        return fact.name
     end
 
     return PROFESSION_ITEM_NAMES[itemId]
@@ -16759,16 +16777,59 @@ function GQ.Data:GetEntryDisplayName(entry)
     return base
 end
 
+function GQ.Data:ItemNameMatchesSuffixTarget(itemName, targetName, entry)
+    itemName = self:NormalizeItemName(itemName)
+    targetName = self:NormalizeItemName(targetName)
+    if not itemName or not targetName then
+        return false
+    end
+
+    if itemName == targetName then
+        return true
+    end
+
+    if entry and entry.suffix and entry.suffix ~= "" then
+        local suffix = tostring(entry.suffix)
+        if suffix:sub(1, 1) ~= " " then
+            suffix = " " .. suffix
+        end
+        if itemName:sub(-#suffix) == suffix then
+            return true
+        end
+    end
+
+    return false
+end
+
+function GQ.Data:EntryDisplayNameReady(entry)
+    if not entry or not entry.itemId then
+        return false
+    end
+
+    local base = self:GetItemDisplayName(entry.itemId)
+    if not base or base:find("^Item %d+$", 1) then
+        return false
+    end
+
+    return true
+end
+
 function GQ.Data:GetSuffixHint(entry)
     if not entry or not entry.suffix then
         return nil
     end
 
+    local parts = { entry.suffix }
+    if entry.suffixRange and entry.suffixRange ~= "" then
+        parts[#parts + 1] = entry.suffixRange
+    elseif entry.suffixId then
+        parts[#parts + 1] = "tier " .. tostring(entry.suffixId)
+    end
     if entry.suffixChance then
-        return entry.suffix .. " (~" .. tostring(entry.suffixChance) .. "% on drop)"
+        parts[#parts + 1] = "~" .. tostring(entry.suffixChance) .. "% on drop"
     end
 
-    return entry.suffix
+    return table.concat(parts, " · ")
 end
 
 -- Novelty on-use effects (fall damage/speed, drunk, party-only buffs, etc.) are not
@@ -16824,8 +16885,62 @@ function GQ.Data:IsNoveltyProcItem(entry)
     return false
 end
 
+-- Ranged weapons whose DPS/procs only matter for Hunters (pull-slot filler for others).
+GQ.Data.HUNTER_ONLY_RANGED_ITEMS = {
+    [2825] = true, -- Bow of Searing Arrows
+}
+
+function GQ.Data:IsHunterOnlyRangedItem(entry)
+    if not entry or not entry.itemId then
+        return false
+    end
+    return self.HUNTER_ONLY_RANGED_ITEMS[entry.itemId] == true
+end
+
+-- Melee attack-speed on-use (not spell haste) — bear/feral only for druids.
+GQ.Data.DRUID_MELEE_HASTE_ITEMS = {
+    [9449] = true, -- Manual Crowd Pummeler
+}
+
+function GQ.Data:IsDruidMeleeHasteForCaster(entry)
+    if not entry or not entry.itemId then
+        return false
+    end
+    if not self.DRUID_MELEE_HASTE_ITEMS[entry.itemId] then
+        return false
+    end
+    if not entry.specs then
+        return false
+    end
+    return entry.specs.balance or entry.specs.restoration
+end
+
+-- On-use AOE / novelty trinkets that are not real stat upgrades for leveling BiS.
+GQ.Data.EXCLUDED_ITEMS = {
+    [13515] = true, -- Ramstein's Lightning Bolts
+}
+
+function GQ.Data:IsExcludedItem(entry)
+    if not entry or not entry.itemId then
+        return false
+    end
+    return self.EXCLUDED_ITEMS[entry.itemId] == true
+end
+
 function GQ.Data:ShouldShowEntry(entry)
-    return entry and not self:IsNoveltyProcItem(entry)
+    if not entry or self:IsNoveltyProcItem(entry) or self:IsExcludedItem(entry) then
+        return false
+    end
+
+    if self:IsHunterOnlyRangedItem(entry) and GQ:GetEffectiveClass() ~= "HUNTER" then
+        return false
+    end
+
+    if self:IsDruidMeleeHasteForCaster(entry) then
+        return false
+    end
+
+    return true
 end
 
 function GQ.Data:GetTooltipScanner()
@@ -16835,7 +16950,7 @@ function GQ.Data:GetTooltipScanner()
     return self._tooltipScanner
 end
 
-function GQ.Data:CacheSuffixItemLink(entry, link)
+function GQ.Data:CacheOwnedSuffixItemLink(entry, link)
     if not entry or not link then
         return
     end
@@ -16845,8 +16960,8 @@ function GQ.Data:CacheSuffixItemLink(entry, link)
         return
     end
 
-    self.suffixLinkCache = self.suffixLinkCache or {}
-    self.suffixLinkCache[key] = link
+    self._ownedSuffixLinks = self._ownedSuffixLinks or {}
+    self._ownedSuffixLinks[key] = link
 end
 
 function GQ.Data:GetCachedSuffixItemLink(entry)
@@ -16859,8 +16974,8 @@ function GQ.Data:GetCachedSuffixItemLink(entry)
         return nil
     end
 
-    if self.suffixLinkCache and self.suffixLinkCache[key] then
-        return self.suffixLinkCache[key]
+    if self._ownedSuffixLinks and self._ownedSuffixLinks[key] then
+        return self._ownedSuffixLinks[key]
     end
 
     return nil
@@ -16882,12 +16997,12 @@ function GQ.Data:FindCachedItemLink(entry)
         end
 
         if entry.suffix and entry.suffix ~= "" then
-            if not self:ItemNameMatchesEntry(self:ItemNameFromLink(link), entry) then
+            if not self:EntrySuffixMatchesLink(entry, link) then
                 return nil
             end
         end
 
-        self:CacheSuffixItemLink(entry, link)
+        self:CacheOwnedSuffixItemLink(entry, link)
         return link
     end
 
@@ -16927,76 +17042,207 @@ function GQ.Data:FindCachedItemLink(entry)
     return nil
 end
 
+function GQ.Data:ExtractItemStringFromHyperlink(hyperlink)
+    if not hyperlink or hyperlink == "" then
+        return nil
+    end
+
+    local itemString = hyperlink:match("|H(item:[^|]+)|h")
+    if itemString then
+        return itemString
+    end
+
+    if hyperlink:match("^item:") then
+        return hyperlink
+    end
+
+    return nil
+end
+
+function GQ.Data:SuffixIdFromLink(link)
+    if not link then
+        return nil
+    end
+
+    local itemString = self:ExtractItemStringFromHyperlink(link)
+    if not itemString and link:match("^item:") then
+        itemString = link
+    end
+    if not itemString then
+        return nil
+    end
+
+    if strsplit then
+        local id = tonumber(select(7, strsplit(":", itemString)))
+        if id and id ~= 0 then
+            return id
+        end
+        return nil
+    end
+
+    return self:ParseSuffixIdFromItemString(itemString)
+end
+
+function GQ.Data:ParseSuffixIdFromItemString(itemString)
+    if not itemString then
+        return nil
+    end
+
+    return tonumber(itemString:match("^item:%d+:0:0:0:0:0:(%-?%d+):"))
+end
+
+function GQ.Data:GetSuffixLinkLevel(entry)
+    if not entry then
+        return 70
+    end
+
+    if GetItemInfo and entry.itemId then
+        local _, _, _, iLevel, reqLevel = GetItemInfo(entry.itemId)
+        if iLevel and iLevel > 0 then
+            return iLevel
+        end
+        if reqLevel and reqLevel > 0 then
+            return reqLevel
+        end
+    end
+
+    if entry.minLevel and entry.minLevel > 0 then
+        return entry.minLevel
+    end
+
+    return 70
+end
+
+-- Random enchant tooltips and completion use pipeline suffixId only.
+-- Positive field-7 id = ItemRandomProperties (fixed tier lookup).
+-- Negative field-7 id = ItemRandomSuffix (ilvl-scaled; factor in field 8).
+function GQ.Data:MakeSuffixTargetLink(entry)
+    if not entry or not entry.itemId then
+        return nil
+    end
+
+    if not entry.suffixId or entry.suffixId == 0 then
+        return nil
+    end
+
+    if entry.suffixId < 0 then
+        local factor = entry.suffixFactor or self:GetSuffixLinkLevel(entry)
+        return string.format("item:%d:0:0:0:0:0:%d:%d:0", entry.itemId, entry.suffixId, factor)
+    end
+
+    return string.format("item:%d:0:0:0:0:0:%d:0:0", entry.itemId, entry.suffixId)
+end
+
+function GQ.Data:EntrySuffixMatchesLink(entry, link)
+    if not entry or not link then
+        return false
+    end
+
+    if self:ItemLinkToId(link) ~= entry.itemId then
+        return false
+    end
+
+    if not entry.suffix or entry.suffix == "" then
+        return true
+    end
+
+    local rolledId = self:SuffixIdFromLink(link)
+    if entry.suffixId and entry.suffixId ~= 0 then
+        if not rolledId then
+            return false
+        end
+        return rolledId >= entry.suffixId
+    end
+
+    return self:ItemNameMatchesEntry(self:ItemNameFromLink(link), entry)
+end
+
 function GQ.Data:ResolveSuffixItemLink(entry)
     if not entry or not entry.suffix or entry.suffix == "" or not entry.itemId then
         return nil
     end
 
-    local key = self:EntryListKey(entry)
-    if not key then
-        return nil
+    self:EnrichEntrySuffix(entry)
+    return self:MakeSuffixTargetLink(entry)
+end
+
+function GQ.Data:AppendSuffixRangeLines(tooltip, entry)
+    if not tooltip or not entry or not entry.suffixRange or entry.suffixRange == "" then
+        return
     end
 
-    self._resolvedSuffixLinks = self._resolvedSuffixLinks or {}
-    local resolved = self._resolvedSuffixLinks[key]
-    if resolved == false then
-        return nil
-    end
-    if resolved then
-        return resolved
-    end
-
-    local owned = self:FindCachedItemLink(entry)
-    if owned then
-        self._resolvedSuffixLinks[key] = owned
-        return owned
-    end
-
-    local targetName = self:NormalizeItemName(self:GetEntryDisplayName(entry))
-    if not targetName then
-        self._resolvedSuffixLinks[key] = false
-        return nil
-    end
-
-    local scanner = self:GetTooltipScanner()
-    local scannerName = scanner:GetName()
-    scanner:SetOwner(UIParent, "ANCHOR_NONE")
-
-    local function tryLink(link)
-        scanner:ClearLines()
-        scanner:SetHyperlink(link)
-        local line1 = _G[scannerName .. "TextLeft1"]
-        local text = line1 and line1:GetText()
-        if text and self:NormalizeItemName(text) == targetName then
-            self:CacheSuffixItemLink(entry, link)
-            return link
+    for part in string.gmatch(entry.suffixRange, "[^,]+") do
+        local text = self:NormalizeItemName(part)
+        if text and text ~= "" then
+            tooltip:AddLine(text, 1, 1, 1)
         end
     end
+end
 
-    local itemId = entry.itemId
-    for suffixId = -1, -250, -1 do
-        local link = string.format("item:%d:0:0:0:0:0:%d:0", itemId, suffixId)
-        local found = tryLink(link)
-        if found then
-            self._resolvedSuffixLinks[key] = found
-            scanner:Hide()
-            return found
-        end
+function GQ.Data:EnsureSuffixTooltipRefresh()
+    if self._suffixTooltipRefresh then
+        return
     end
 
-    for suffixId = 1, 250 do
-        local link = string.format("item:%d:0:0:0:0:0:%d:0", itemId, suffixId)
-        local found = tryLink(link)
-        if found then
-            self._resolvedSuffixLinks[key] = found
-            scanner:Hide()
-            return found
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    frame:SetScript("OnEvent", function()
+        local pending = self._pendingSuffixTooltips
+        if not pending then
+            return
         end
+
+        for tooltip, entry in pairs(pending) do
+            if not tooltip or not tooltip.IsShown or not tooltip:IsShown() then
+                pending[tooltip] = nil
+            else
+                self:EnrichEntrySuffix(entry)
+                local link = self:MakeSuffixTargetLink(entry)
+                if link then
+                    if GetItemInfo then
+                        GetItemInfo(link)
+                    end
+                    tooltip:ClearLines()
+                    tooltip:SetHyperlink(link)
+                    pending[tooltip] = nil
+                end
+            end
+        end
+    end)
+    self._suffixTooltipRefresh = frame
+end
+
+function GQ.Data:TrackPendingSuffixTooltip(tooltip, entry)
+    if not tooltip or not entry then
+        return
     end
 
-    scanner:Hide()
-    self._resolvedSuffixLinks[key] = false
-    return nil
+    self:EnsureSuffixTooltipRefresh()
+    self._pendingSuffixTooltips = self._pendingSuffixTooltips or {}
+    self._pendingSuffixTooltips[tooltip] = entry
+
+    if entry.itemId and GetItemInfo then
+        GetItemInfo(entry.itemId)
+    end
+end
+
+function GQ.Data:TryShowSuffixTargetTooltip(tooltip, entry)
+    if not tooltip or not entry then
+        return false
+    end
+
+    self:EnrichEntrySuffix(entry)
+    local link = self:MakeSuffixTargetLink(entry)
+    if not link then
+        return false
+    end
+
+    if GetItemInfo then
+        GetItemInfo(link)
+    end
+
+    tooltip:SetHyperlink(link)
+    return true
 end
 
 function GQ.Data:CopyTooltipLinesFromScanner(tooltip, scanner, skipTitle)
@@ -17040,6 +17286,7 @@ function GQ.Data:ShowSuffixFallbackTooltip(tooltip, entry)
     tooltip:ClearLines()
     tooltip:SetText(displayName, r, g, b)
     self:CopyTooltipLinesFromScanner(tooltip, scanner, true)
+    self:AppendSuffixRangeLines(tooltip, entry)
 
     local suffixHint = self:GetSuffixHint(entry)
     if suffixHint then
@@ -17056,13 +17303,23 @@ function GQ.Data:GetEntryItemHyperlink(entry)
     end
 
     if entry.suffix and entry.suffix ~= "" then
-        local link = self:ResolveSuffixItemLink(entry)
+        self:EnrichEntrySuffix(entry)
+        local link = self:MakeSuffixTargetLink(entry)
         if link then
+            local _, itemHyperlink = GetItemInfo(link)
+            if itemHyperlink and itemHyperlink ~= "" then
+                return itemHyperlink
+            end
             return link
         end
     end
 
-    return select(2, GetItemInfo(entry.itemId)) or ("item:" .. entry.itemId)
+    local _, itemHyperlink = GetItemInfo(entry.itemId)
+    if itemHyperlink and itemHyperlink ~= "" then
+        return itemHyperlink
+    end
+
+    return "item:" .. entry.itemId
 end
 
 function GQ.Data:PopulateEntryItemTooltip(tooltip, entry)
@@ -17071,13 +17328,15 @@ function GQ.Data:PopulateEntryItemTooltip(tooltip, entry)
     end
 
     if entry.suffix and entry.suffix ~= "" then
-        local link = self:ResolveSuffixItemLink(entry)
-        if link then
-            tooltip:SetHyperlink(link)
+        self:EnrichEntrySuffix(entry)
+        if self:MakeSuffixTargetLink(entry) then
+            self:TryShowSuffixTargetTooltip(tooltip, entry)
+            self:TrackPendingSuffixTooltip(tooltip, entry)
             return true
         end
 
         self:ShowSuffixFallbackTooltip(tooltip, entry)
+        self:TrackPendingSuffixTooltip(tooltip, entry)
         return true
     end
 
@@ -17121,13 +17380,8 @@ function GQ.Data:CacheContainerItemLinks()
         end
 
         for _, entry in ipairs(self.byItemId[itemId] or {}) do
-            if entry.suffix and self:ItemNameMatchesEntry(itemName, entry) then
-                self:CacheSuffixItemLink(entry, link)
-                local key = self:EntryListKey(entry)
-                if key then
-                    self._resolvedSuffixLinks = self._resolvedSuffixLinks or {}
-                    self._resolvedSuffixLinks[key] = link
-                end
+            if entry.suffix and self:EntrySuffixMatchesLink(entry, link) then
+                self:CacheOwnedSuffixItemLink(entry, link)
             end
         end
     end
@@ -17208,6 +17462,8 @@ function GQ.Data:PlayerOwnsEntryItem(entry)
         return false
     end
 
+    self:EnrichEntrySuffix(entry)
+
     local itemId = entry.itemId
     local needsSuffix = entry.suffix and entry.suffix ~= ""
 
@@ -17217,7 +17473,7 @@ function GQ.Data:PlayerOwnsEntryItem(entry)
         end
 
         if needsSuffix then
-            return self:ItemNameMatchesEntry(self:ItemNameFromLink(link), entry)
+            return self:EntrySuffixMatchesLink(entry, link)
         end
 
         return true
@@ -17282,6 +17538,8 @@ end
 function GQ.Data:InvalidateQueryCache()
     self._queryCache = nil
     self._activeBandCache = nil
+    self.notableBySlot = nil
+    self._notableBySlotClass = nil
 end
 
 function GQ.Data:GetQueryCacheKey()
@@ -17430,6 +17688,9 @@ function GQ.Data:EntryListKey(entry)
     end
 
     if entry.suffix and entry.suffix ~= "" then
+        if entry.suffixId and entry.suffixId ~= 0 then
+            return entry.itemId .. "\0" .. tostring(entry.suffixId)
+        end
         return entry.itemId .. "\0" .. entry.suffix
     end
 
@@ -17537,7 +17798,50 @@ function GQ.Data:BackfillCandidates(allEntries, filtered, minCount)
     return self:DeduplicateEntriesByItem(filtered)
 end
 
-function GQ.Data:BuildNotableEntry(row, facts)
+local NOTABLE_CLASS = {
+    PALADIN = { rows = "paladinNotable", facts = "itemFacts" },
+    WARRIOR = { rows = "warriorNotable", facts = "warriorItemFacts" },
+    HUNTER  = { rows = "hunterNotable",  facts = "hunterItemFacts" },
+    DRUID   = { rows = "druidNotable",   facts = "druidItemFacts" },
+    SHAMAN  = { rows = "shamanNotable",  facts = "shamanItemFacts" },
+    ROGUE   = { rows = "rogueNotable",   facts = "rogueItemFacts" },
+}
+
+local NOTABLE_SPECS = {
+    PALADIN = {
+        retribution = { retribution = true },
+        protection = { protection = true },
+        holy = { holy = true },
+    },
+    WARRIOR = {
+        arms = { arms = true },
+        fury = { fury = true },
+        protection = { protection = true },
+    },
+    HUNTER = {
+        beast_mastery = { beast_mastery = true },
+        marksmanship  = { marksmanship  = true },
+        survival      = { survival      = true },
+    },
+    DRUID = {
+        bear        = { bear        = true },
+        feral       = { feral       = true },
+        balance     = { balance     = true },
+        restoration = { restoration = true },
+    },
+    SHAMAN = {
+        elemental   = { elemental   = true },
+        enhancement = { enhancement = true },
+        restoration = { restoration = true },
+    },
+    ROGUE = {
+        combat        = { combat        = true },
+        assassination = { assassination = true },
+        subtlety      = { subtlety      = true },
+    },
+}
+
+function GQ.Data:BuildNotableEntry(row, facts, classFile)
     if not row or not facts then
         return nil
     end
@@ -17549,6 +17853,10 @@ function GQ.Data:BuildNotableEntry(row, facts)
         return nil
     end
 
+    if self:IsExcludedItem({ itemId = itemId, proc = f.proc }) then
+        return nil
+    end
+
     if f.proc then
         local probe = { itemId = itemId, proc = f.proc }
         if self:IsNoveltyProcItem(probe) then
@@ -17556,25 +17864,21 @@ function GQ.Data:BuildNotableEntry(row, facts)
         end
     end
 
-    local PALADIN = { PALADIN = true }
-    local SPEC = {
-        retribution = { retribution = true },
-        protection = { protection = true },
-        holy = { holy = true },
-    }
+    local classTbl = { [classFile] = true }
+    local specTbl = NOTABLE_SPECS[classFile]
     local FACTION = {
         Alliance = { Alliance = true },
         Horde = { Horde = true },
     }
 
-    return {
-        id = string.format("notable:%d:%s:%d:%s:%s", itemId, slot, minL, tostring(spec), tostring(faction)),
+    local entry = {
+        id = string.format("notable:%s:%d:%s:%d:%s:%s", classFile, itemId, slot, minL, tostring(spec), tostring(faction)),
         itemId = itemId,
         slot = slot,
         minLevel = minL,
         maxLevel = maxL,
-        classes = PALADIN,
-        specs = spec and SPEC[spec] or nil,
+        classes = classTbl,
+        specs = spec and specTbl and specTbl[spec] or nil,
         factions = faction and FACTION[faction] or nil,
         sourceType = f.sourceType,
         instructions = f.instructions,
@@ -17583,18 +17887,28 @@ function GQ.Data:BuildNotableEntry(row, facts)
         questName = f.questName,
         profession = f.profession,
         proc = f.proc,
+        suffix = row.suffix,
+        suffixChance = row.suffixChance,
+        suffixId = row.suffixId,
+        suffixRange = row.suffixRange,
         generated = true,
         notable = true,
     }
+
+    return self:EnrichEntrySuffix(entry)
 end
 
-function GQ.Data:EnsureNotableBySlot()
-    if self.notableBySlot then
+function GQ.Data:EnsureNotableBySlot(classFile)
+    classFile = classFile or GQ:GetEffectiveClass()
+    if self._notableBySlotClass == classFile and self.notableBySlot then
         return
     end
 
     self.notableBySlot = {}
-    local rows = self.paladinNotable
+    self._notableBySlotClass = classFile
+
+    local src = NOTABLE_CLASS[classFile]
+    local rows = src and self[src.rows]
     if not rows then
         return
     end
@@ -17612,14 +17926,20 @@ function GQ.Data:GetNotableForSlot(slotName)
         return {}
     end
 
-    local rows = self.paladinNotable
-    local facts = self.itemFacts
-    if not rows or not facts or GQ:GetEffectiveClass() ~= "PALADIN" then
+    local classFile = GQ:GetEffectiveClass()
+    local src = NOTABLE_CLASS[classFile]
+    if not src then
+        return {}
+    end
+
+    local rows = self[src.rows]
+    local facts = self[src.facts]
+    if not rows or not facts then
         return {}
     end
 
     slotName = self:NormalizeSlotName(slotName)
-    self:EnsureNotableBySlot()
+    self:EnsureNotableBySlot(classFile)
     local slotRows = self.notableBySlot[slotName]
     if not slotRows then
         return {}
@@ -17627,7 +17947,7 @@ function GQ.Data:GetNotableForSlot(slotName)
 
     local results = {}
     for i = 1, #slotRows do
-        local entry = self:BuildNotableEntry(slotRows[i], facts)
+        local entry = self:BuildNotableEntry(slotRows[i], facts, classFile)
         if entry and self:EntryMatchesPlayerBand(entry) then
             table.insert(results, entry)
         end
@@ -17735,12 +18055,15 @@ GQ.Data.BASE_SLOTS = {
 }
 
 GQ.Data.CLASS_RANGED = {
+    WARRIOR = true,
     ROGUE = true,
     HUNTER = true,
     MAGE = true,
     PRIEST = true,
     WARLOCK = true,
     SHAMAN = true,
+    PALADIN = true,
+    DRUID = true,
 }
 
 -- GearQuest log/popup slots that unlock at specific character levels.
@@ -17805,8 +18128,17 @@ end
 
 function GQ.Data:SlotLabel(slotName)
     slotName = self:NormalizeSlotName(slotName)
-    if slotName == "Ranged" and GQ:GetEffectiveClass() == "SHAMAN" then
-        return "Totem"
+    if slotName == "Ranged" then
+        local classFile = GQ:GetEffectiveClass()
+        if classFile == "SHAMAN" then
+            return "Totem"
+        end
+        if classFile == "DRUID" then
+            return "Idol"
+        end
+        if classFile == "PALADIN" then
+            return "Relic"
+        end
     end
     return self.SLOT_LABELS[slotName] or slotName
 end

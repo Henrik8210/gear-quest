@@ -31,7 +31,7 @@ GQ.Spec.CLASS_SPECS = {
     },
     HUNTER = {
         { id = "beast_mastery", label = "Beast Mastery", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", default = true },
-        { id = "marksmanship", label = "Marksmanship", icon = "Interface\\Icons\\Ability_Hunter_AimedShot", comingLater = true },
+        { id = "marksmanship", label = "Marksmanship", icon = "Interface\\Icons\\Ability_Hunter_AimedShot" },
         { id = "survival", label = "Survival", icon = "Interface\\Icons\\Ability_Hunter_SwiftStrike" },
     },
     ROGUE = {

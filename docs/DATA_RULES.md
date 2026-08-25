@@ -208,6 +208,26 @@ Each slot should have **at least three entries** in `Data.lua` for that level ba
 
 The addon validates at runtime with `IsEquippableItem` and required level from `GetItemInfo`. Bad data should still be caught in review using this checklist.
 
+### Hunter-only ranged weapons
+
+Some bows, guns, and crossbows have **ranged DPS procs** (e.g. “Chance to strike your ranged target…”) that only benefit **Hunter** — other classes use the Ranged slot for pull tagging, not damage. Do **not** add these to Warrior, Rogue, or other non-Hunter generated/curated lists.
+
+Runtime filter: `GQ.Data.HUNTER_ONLY_RANGED_ITEMS` in `Data.lua` (`ShouldShowEntry`). When the pipeline surfaces a similar item for the wrong class, add its item ID there and strip it from that class’s generated file.
+
+| Item ID | Name |
+|---------|------|
+| 2825 | Bow of Searing Arrows |
+
+### Excluded items (novelty / non-upgrade procs)
+
+Some trinkets and on-use items score in the pipeline but are not meaningful leveling upgrades (AOE novelty effects, etc.). Strip them from generated files and add the item ID to `GQ.Data.EXCLUDED_ITEMS` in `Data.lua` (`ShouldShowEntry` / notable build).
+
+| Item ID | Name |
+|---------|------|
+| 13515 | Ramstein's Lightning Bolts |
+
+Post-import script: `scripts/fix-ramstein-lightning-bolts.mjs`
+
 ---
 
 ## 3. Level bands and visibility
@@ -333,10 +353,11 @@ Do **not** mention Holy/Protection availability in the message — the picker al
 | File | Role |
 |------|------|
 | `GearQuest/Data.lua` | Curated entries |
-| `GearQuest/DataAdapter.lua` | Merges generated Paladin tables into `entries` at load |
-| `GearQuest/_generated/Data.Paladin.generated.lua` | Generated picks + item facts + notables (10–69) |
+| `GearQuest/DataAdapter.lua` | Merges generated class tables into `entries` at load; suffix lookup/enrichment |
+| `GearQuest/_generated/*.generated.lua` | Generated picks + item facts + notables (10–69, six classes) |
 | `GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md` | Generated pipeline rules (stat weights, R1–R9) |
-| `scripts/verify-paladin-bis.mjs` | Post-merge entry count sanity check |
+| `docs/SUFFIX-RANDOM-ENCHANT.md` | **Random enchant addon rules** — suffixId matching, negative ids, notables, tooltips |
+| `scripts/verify-generated-bis.mjs` | Post-merge entry count + suffixId spot checks (all six classes) |
 | `GearQuest/Spec.lua` | Spec definitions, icons, `comingLater`, saved choice, picker filtering |
 | `GearQuest/Log.lua` | Spec icon + arrow UI, spec picker chrome |
 | `GearQuest/Equip.lua` | Equippability, required level, armor tier, spec, level grace |

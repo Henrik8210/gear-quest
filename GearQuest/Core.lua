@@ -58,6 +58,8 @@ function GQ:PLAYER_LOGIN()
         GearQuestDB.crafted = GearQuestDB.crafted or {}
         GearQuestDB.dismissedCompleted = GearQuestDB.dismissedCompleted or {}
         GearQuestDB.settings = GearQuestDB.settings or {}
+        GearQuestDB.suffixLinks = nil
+        GearQuestDB.suffixLinksVersion = nil
         self.Preview:MigrateSettings()
         self.Data:BuildIndex()
         self.Data:CacheContainerItemLinks()

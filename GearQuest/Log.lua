@@ -77,9 +77,57 @@ end
 local function GetListRowTextMaxWidth(row, leftInset)
     local width = row:GetWidth()
     if not width or width <= 0 then
-        width = PANEL_WIDTH - (PANEL_INSET * 2) - SCROLLBAR_INSET
+        width = PANEL_WIDTH - (PANEL_INSET * 2)
     end
     return math.max(40, width - leftInset - LIST_ROW_RIGHT_PAD)
+end
+
+local function IsListRowHighlightable(rowType)
+    return rowType == "item" or rowType == "notable"
+end
+
+local function UpdateListRowHighlight(row)
+    if not row or not row.highlight then
+        return
+    end
+    if not IsListRowHighlightable(row.rowType) then
+        row.highlight:Hide()
+        return
+    end
+
+    local log = _G.GearQuest and _G.GearQuest.Log
+    local selected = log and row.entry and row.entry.id and row.entry.id == log.selectedHuntId
+    if selected or row:IsMouseOver() then
+        row.highlight:Show()
+    else
+        row.highlight:Hide()
+    end
+end
+
+local function AnchorListRow(row, scrollChild, scroll, yOffset)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -yOffset)
+    if scroll then
+        row:SetPoint("RIGHT", scroll, "RIGHT", 0, 0)
+    else
+        row:SetPoint("RIGHT", scrollChild, "RIGHT", 0, 0)
+    end
+end
+
+local function GetListItemQualityColor(itemId)
+    if not itemId or not GetItemInfo then
+        return GetItemQualityColor(1)
+    end
+
+    GetItemInfo(itemId)
+    local _, _, quality = GetItemInfo(itemId)
+    return GetItemQualityColor(quality or 1)
+end
+
+local function PrimeListEntryItemInfo(entry)
+    if entry and entry.itemId and GetItemInfo then
+        GetItemInfo(entry.itemId)
+    end
 end
 
 local function BuildListItemTags(entry, status, includeNewLabel)
@@ -1228,6 +1276,26 @@ function GQ.Log:CheckAutoCompletion()
     end
 end
 
+function GQ.Log:ScheduleListRefresh()
+    if not C_Timer or not C_Timer.After then
+        if self.frame and self.frame:IsShown() then
+            self:Refresh()
+        end
+        return
+    end
+
+    if self._listRefreshScheduled then
+        return
+    end
+    self._listRefreshScheduled = true
+    C_Timer.After(0, function()
+        self._listRefreshScheduled = false
+        if self.frame and self.frame:IsShown() then
+            self:Refresh()
+        end
+    end)
+end
+
 function GQ.Log:ScheduleAutoCompletionCheck()
     if self.completionPending then
         return
@@ -1378,10 +1446,12 @@ function GQ.Log:CreateListRow(index)
 
     row:SetScript("OnEnter", function(self)
         ShowItemTooltipForRow(self)
+        UpdateListRowHighlight(self)
     end)
 
-    row:SetScript("OnLeave", function()
+    row:SetScript("OnLeave", function(self)
         HideItemTooltip()
+        UpdateListRowHighlight(self)
     end)
 
     return row
@@ -1412,6 +1482,10 @@ function GQ.Log:EnsureTrackerEvents()
 
         if event == "BAG_UPDATE" and GQ.Data and GQ.Data.CacheContainerItemLinks then
             GQ.Data:CacheContainerItemLinks()
+        end
+
+        if event == "GET_ITEM_INFO_RECEIVED" then
+            log:ScheduleListRefresh()
         end
 
         log:ScheduleAutoCompletionCheck()
@@ -2148,9 +2222,9 @@ end
 
 function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
     row:Show()
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", self.frame.scrollChild, "TOPLEFT", 0, -yOffset)
-    row:SetPoint("RIGHT", self.frame.scrollChild, "RIGHT", 0, 0)
+    local scrollChild = self.frame.scrollChild
+    local scroll = self.frame.scroll
+    AnchorListRow(row, scrollChild, scroll, yOffset)
     row:SetHeight(ROW_HEIGHT)
     row.rowType = rowType
     row.slotName = slotName
@@ -2199,8 +2273,8 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         row:SetScript("OnClick", nil)
     elseif rowType == "notable" then
         local name = GQ.Data:GetEntryDisplayName(entry) or ("Item " .. entry.itemId)
-        local _, _, quality = GetItemInfo(entry.itemId)
-        local r, g, b = GetItemQualityColor(quality or 1)
+        PrimeListEntryItemInfo(entry)
+        local r, g, b = GetListItemQualityColor(entry.itemId)
         local status = GetHuntStatus(entry.id)
 
         row.icon:Show()
@@ -2211,18 +2285,14 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         row.text:SetPoint("RIGHT", row, "RIGHT", -LIST_ROW_RIGHT_PAD, 0)
         SetListRowItemText(row, LIST_ROW_NOTABLE_LEFT, name, entry, status, false, r, g, b)
 
-        if entry.id == self.selectedHuntId then
-            row.highlight:Show()
-        else
-            row.highlight:Hide()
-        end
+        UpdateListRowHighlight(row)
         row:SetScript("OnClick", function()
             OnListRowItemClick(entry)
         end)
     else
         local name = tostring(GQ.Data:GetEntryDisplayName(entry) or ("Item " .. tostring(entry.itemId)))
-        local _, _, quality = GetItemInfo(entry.itemId)
-        local r, g, b = GetItemQualityColor(quality or 1)
+        PrimeListEntryItemInfo(entry)
+        local r, g, b = GetListItemQualityColor(entry.itemId)
         local status = GetHuntStatus(entry.id)
         local onCompletedTab = self:GetListTab() == "completed"
         local isObtained = entry.id and self:IsEntryObtained(entry.id)
@@ -2245,11 +2315,7 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
             SetListRowItemText(row, LIST_ROW_ITEM_LEFT, name, entry, status, showNewLabel, r, g, b)
         end
 
-        if entry.id == self.selectedHuntId then
-            row.highlight:Show()
-        else
-            row.highlight:Hide()
-        end
+        UpdateListRowHighlight(row)
         row:SetScript("OnClick", function()
             OnListRowItemClick(entry)
         end)
@@ -2309,7 +2375,7 @@ function GQ.Log:BuildDetailLines(entry)
     if entry.sourceType == "world_drop" then
         local isBoE = GQ.Equip and GQ.Equip.IsBindOnEquip and GQ.Equip:IsBindOnEquip(entry.itemId)
         if isBoE then
-            table.insert(lines, "\nAuction House: Also check the Auction House — this item binds when equipped.")
+            table.insert(lines, "\nAlso available on the Auction House (binds when equipped).")
         end
     end
 
@@ -2344,9 +2410,11 @@ function GQ.Log:EnsureItemInfoListener()
     frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     frame:SetScript("OnEvent", function()
         local log = _G.GearQuest and _G.GearQuest.Log
-        if not log or not log.selectedHuntId or not log.frame or not log.frame:IsShown() then
+        if not log or not log.frame or not log.frame:IsShown() then
             return
         end
+
+        log:ScheduleListRefresh()
 
         local entry = log.selectedEntry or GQ.Data:GetEntryById(log.selectedHuntId)
         if not entry then
@@ -2454,6 +2522,9 @@ function GQ.Log:Refresh()
     end
 
     for i, spec in ipairs(layoutRows) do
+        if spec.entry then
+            PrimeListEntryItemInfo(spec.entry)
+        end
         if not self.listRows[i] then
             self.listRows[i] = self:CreateListRow(i)
         end

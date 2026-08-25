@@ -9,3 +9,10 @@ Desktop.ini
 node_modules/
 scripts/output/
 _paladin-bis-extract/
+_warrior-bis-extract/
+_casterfix-extract/
+_druid-bis-extract/
+_hunter-bis-extract/
+_notables-import/
+_rootcause-import/
+_suffixids-import/
