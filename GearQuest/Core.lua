@@ -61,6 +61,7 @@ function GQ:PLAYER_LOGIN()
         GearQuestDB.suffixLinks = nil
         GearQuestDB.suffixLinksVersion = nil
         self.Preview:MigrateSettings()
+        self.Preview:OnPlayerLogin()
         self.Data:BuildIndex()
         self.Data:CacheContainerItemLinks()
         self.Indicator:Init()

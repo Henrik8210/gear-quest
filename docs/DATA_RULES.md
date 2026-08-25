@@ -282,14 +282,17 @@ Players can browse another class/level/spec without changing their character:
 
 Preview state lives in `GearQuestDB.settings.preview` (class, level, faction, `specByClass`). Spec choice in preview does not overwrite the live character’s saved spec.
 
+**Character login:** preview is account-wide. On `PLAYER_LOGIN`, if the character GUID differs from `settings.preview.loginCharacterKey`, preview mode turns off and class/level/faction sync to the new toon. Same-character `/reload` does not reset an active simulation.
+
 ### Player controls
 
 - **Log UI (level 10+):** top-right of the tab bar — current spec **icon** plus a **dropdown arrow**. Only the arrow opens the picker. Active/Completed stay centered below.
 - **Spec picker:** same metal border + black background as the quest log list panel. Unavailable specs are greyed, labelled `(coming later)`, and not clickable.
 - **Chat:** `/gq spec ret` (aliases: `spec`, `specialization`, `talent`). Only selectable specs work; others return *"… is coming later."*
 - **Persistence:** choice is saved per class in `GearQuestDB.settings.specByClass`. In **preview mode** (`/gq set on`), spec choice is stored in `settings.preview.specByClass` so preview browsing does not overwrite your real character’s saved spec.
-- **Icons:** spec picker uses curated icons from `CLASS_SPECS` in `Spec.lua` (do not read `GetTalentTabInfo` for icons — it reflects the **live player’s** talent trees, not the preview/effective class, and Classic return indices differ from retail).
-- **Live characters:** if no saved choice, GearQuest infers spec from talent points **when that spec is selectable**; otherwise defaults to Retribution.
+- **Icons:** spec picker uses curated icons from `CLASS_SPECS` in `Spec.lua` (do not read `GetTalentTabInfo` for icons — it reflects the **live player’s** talent trees, not the preview/effective class).
+- **Talent detection:** `DetectSpecFromTalents` reads `pointsSpent` from `GetTalentTabInfo` — **5th return** on TBC Anniversary / modern Classic (`id, name, description, icon, pointsSpent, …`); legacy clients use the 3rd return. Always `tonumber()` before comparing.
+- **Live characters:** if no saved choice, GearQuest infers spec from talent points **when that spec is selectable**; otherwise defaults to the class default.
 
 ### Entry field
 
@@ -706,6 +709,8 @@ Classic **Phase 6 (Naxx)** BiS is **not** in the Hoizame AtlasLoot zip. AtlasLoo
 | `Compare.lua` | Priest staff lost to ilvl vs 1H+off-hand | Pipeline rank preserved for Priest/Mage/Warlock |
 | `Data.lua` | Rogue item facts missing from `GetItemFact` | Added `rogueItemFacts` / `rogueEarly1to9Facts` |
 | `Preview.lua` / `Minimap.lua` | Preview only via slash commands | Right-click minimap simulate panel (class/spec/level) |
+| `Preview.lua` / `Core.lua` | Preview persisted across character logins | Reset preview on new character GUID at login |
+| `Spec.lua` | `GetTalentTabInfo` 3rd return treated as points | Read 5th return on Anniversary; `tonumber` guard |
 
 ### Open (not yet addressed)
 

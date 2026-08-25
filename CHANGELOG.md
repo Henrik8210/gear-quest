@@ -12,6 +12,10 @@
 - Does not close on outside click; removed from `UISpecialFrames`.
 - Login + simulate chat hints updated (`By Weber8210`, minimap simulate tip, gear-slot hint after simulate).
 
+### Preview / login fixes
+- **Character switch:** preview simulation clears on login when the character GUID changes (SavedVariables are account-wide); `/reload` on the same toon keeps an active simulation.
+- **`GetTalentTabInfo`:** TBC Anniversary returns `pointsSpent` as the 5th value (not 3rd) — fixes load error and talent-based spec detection on login.
+
 ### Priest generated BiS (10–69)
 - Seventh pipeline class: `Data.Priest.generated.lua`, `Data.Priest.Early.1to9.generated.lua`, weights/guides JSON.
 - **`Compare.lua`:** Priest/Mage/Warlock keep pipeline `curatedRank` (no ilvl re-sort) — fixes staff vs 1H+off-hand ordering.

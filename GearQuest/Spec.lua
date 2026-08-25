@@ -289,6 +289,17 @@ function GQ.Spec:SetSelectedSpec(specId, classFile)
     return true
 end
 
+local function GetTalentTabPoints(tab)
+    if not GetTalentTabInfo then
+        return 0
+    end
+
+    local _, _, third, _, fifth = GetTalentTabInfo(tab)
+    -- TBC Anniversary / modern Classic: id, name, description, icon, pointsSpent, ...
+    -- Legacy Classic: name, icon, pointsSpent, fileName
+    return tonumber(fifth) or tonumber(third) or 0
+end
+
 function GQ.Spec:DetectSpecFromTalents(classFile)
     local byTab = SPEC_BY_TAB[classFile]
     if not byTab or not GetTalentTabInfo then
@@ -297,8 +308,7 @@ function GQ.Spec:DetectSpecFromTalents(classFile)
 
     local bestTab, bestPoints = nil, 0
     for tab = 1, #byTab do
-        local _, _, points = GetTalentTabInfo(tab)
-        points = points or 0
+        local points = GetTalentTabPoints(tab)
         if points > bestPoints then
             bestPoints = points
             bestTab = tab
@@ -313,7 +323,7 @@ function GQ.Spec:DetectSpecFromTalents(classFile)
 end
 
 function GQ.Spec:GetEffectiveSpec()
-    local level = GQ:GetEffectiveLevel()
+    local level = tonumber(GQ:GetEffectiveLevel()) or 0
     if level < self.TALENT_LEVEL then
         return nil
     end

@@ -79,6 +79,7 @@ function GQ.Preview:GetSettings()
     if not preview.level then
         preview.level = 4
     end
+    preview.level = tonumber(preview.level) or preview.level
     if not preview.faction then
         local faction = UnitFactionGroup("player")
         preview.faction = faction or "Alliance"
@@ -139,6 +140,34 @@ function GQ.Preview:ApplyCurrentCharacter()
     preview.class = classFile
     preview.level = level
     preview.faction = faction
+end
+
+function GQ.Preview:GetLoginCharacterKey()
+    if UnitGUID then
+        local guid = UnitGUID("player")
+        if guid then
+            return guid
+        end
+    end
+    return (UnitName("player") or "") .. "-" .. (GetRealmName() or "")
+end
+
+-- New character login: drop simulation from a previous toon; keep it on /reload.
+function GQ.Preview:OnPlayerLogin()
+    local settings = self:GetSettings()
+    local key = self:GetLoginCharacterKey()
+    if settings.loginCharacterKey == key then
+        return false
+    end
+
+    settings.loginCharacterKey = key
+    self:SetEnabled(false)
+
+    local _, classFile = UnitClass("player")
+    settings.class = classFile
+    settings.level = UnitLevel("player")
+    settings.faction = UnitFactionGroup("player") or "Alliance"
+    return true
 end
 
 function GQ.Preview:GetEffectiveClass()
