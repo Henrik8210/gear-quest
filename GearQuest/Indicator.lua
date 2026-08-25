@@ -1009,22 +1009,94 @@ function GQ.Indicator:RebuildCache()
     end
 
     for _, slotName in ipairs(GQ.Data:GetSlotsForClass(classFile)) do
-        local maxUpgrades = GQ.Data.GetMaxUpgradesForSlot and GQ.Data:GetMaxUpgradesForSlot(slotName) or 3
-        local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, maxUpgrades)
-        for _, entry in ipairs(upgrades) do
-            if entry.itemId and not (GQ.Log and GQ.Log.IsItemIdObtained and GQ.Log:IsItemIdObtained(entry.itemId)) then
-                self.upgradeItems[entry.itemId] = true
-                local itemName = (GQ.Data.GetItemDisplayName and GQ.Data:GetItemDisplayName(entry.itemId))
-                    or GetItemInfo(entry.itemId)
-                    or self.itemNameCache[entry.itemId]
-                if itemName then
-                    self.itemNameCache[entry.itemId] = itemName
-                    self.upgradeItemNames[itemName:lower()] = entry.itemId
-                else
-                    GetItemInfo(entry.itemId)
-                end
+        self:RebuildCacheForSlot(slotName)
+    end
+end
+
+function GQ.Indicator:RebuildCacheForSlot(slotName)
+    if not self.upgradeItems then
+        self.upgradeItems = {}
+    end
+    if not self.upgradeItemNames then
+        self.upgradeItemNames = {}
+    end
+    self.itemNameCache = self.itemNameCache or {}
+
+    local maxUpgrades = GQ.Data.GetMaxUpgradesForSlot and GQ.Data:GetMaxUpgradesForSlot(slotName) or 3
+    local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, maxUpgrades)
+    for _, entry in ipairs(upgrades) do
+        if entry.itemId and not (GQ.Log and GQ.Log.IsItemIdObtained and GQ.Log:IsItemIdObtained(entry.itemId)) then
+            self.upgradeItems[entry.itemId] = true
+            local itemName = (GQ.Data.GetItemDisplayName and GQ.Data:GetItemDisplayName(entry.itemId))
+                or GetItemInfo(entry.itemId)
+                or self.itemNameCache[entry.itemId]
+            if itemName then
+                self.itemNameCache[entry.itemId] = itemName
+                self.upgradeItemNames[itemName:lower()] = entry.itemId
+            else
+                GetItemInfo(entry.itemId)
             end
         end
+    end
+end
+
+local REBUILD_SLOTS_PER_FRAME = 3
+
+function GQ.Indicator:RebuildCacheAsync(onComplete)
+    if not GQ.Data or not GQ.Data.GetSlotsForClass then
+        if onComplete then
+            onComplete()
+        end
+        return
+    end
+
+    local classFile = GQ:GetEffectiveClass()
+    if not classFile then
+        if onComplete then
+            onComplete()
+        end
+        return
+    end
+
+    if self._rebuildCacheTimer and self._rebuildCacheTimer.Cancel then
+        self._rebuildCacheTimer:Cancel()
+        self._rebuildCacheTimer = nil
+    end
+
+    self.upgradeItems = {}
+    self.upgradeItemNames = {}
+    self.itemNameCache = self.itemNameCache or {}
+
+    local slots = GQ.Data:GetSlotsForClass(classFile)
+    local index = 1
+
+    local function step()
+        local last = math.min(index + REBUILD_SLOTS_PER_FRAME - 1, #slots)
+        for i = index, last do
+            self:RebuildCacheForSlot(slots[i])
+        end
+        index = last + 1
+
+        if index <= #slots then
+            if C_Timer and C_Timer.After then
+                self._rebuildCacheTimer = C_Timer.After(0, step)
+            else
+                step()
+            end
+            return
+        end
+
+        self._rebuildCacheTimer = nil
+        self:RefreshAll()
+        if onComplete then
+            onComplete()
+        end
+    end
+
+    if C_Timer and C_Timer.After then
+        self._rebuildCacheTimer = C_Timer.After(0, step)
+    else
+        step()
     end
 end
 

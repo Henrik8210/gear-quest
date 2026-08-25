@@ -36,8 +36,8 @@ GQ.Spec.CLASS_SPECS = {
     },
     ROGUE = {
         { id = "combat", label = "Combat", icon = "Interface\\Icons\\Ability_BackStab", default = true },
-        { id = "assassination", label = "Assassination", icon = "Interface\\Icons\\Ability_Rogue_Eviscerate", comingLater = true },
-        { id = "subtlety", label = "Subtlety", icon = "Interface\\Icons\\Ability_Stealth", comingLater = true },
+        { id = "assassination", label = "Assassination", icon = "Interface\\Icons\\Ability_Rogue_Eviscerate" },
+        { id = "subtlety", label = "Subtlety", icon = "Interface\\Icons\\Ability_Stealth" },
     },
     PRIEST = {
         { id = "shadow", label = "Shadow", icon = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", default = true },
@@ -278,12 +278,12 @@ function GQ.Spec:SetSelectedSpec(specId, classFile)
     local previewMode = GQ.IsPreviewEnabled and GQ:IsPreviewEnabled()
     GetSpecStore(previewMode)[classFile] = matched.id
 
-    if GQ.Data and GQ.Data.InvalidateQueryCache then
-        GQ.Data:InvalidateQueryCache()
+    if GQ.Data and GQ.Data.InvalidateSpecCache then
+        GQ.Data:InvalidateSpecCache()
     end
 
     if GQ.RefreshUI then
-        GQ:RefreshUI()
+        GQ:RefreshUI({ reason = "spec" })
     end
 
     return true

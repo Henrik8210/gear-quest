@@ -26,15 +26,17 @@ Expected total: **1,179 curated + 9,180 paladinPicks + 221 paladinHorde1to9 = 10
 | Source | What “top 3” means |
 |--------|---------------------|
 | **Curated (early bands, level 70)** | Human judgment: realistic upgrades for that level band, correct armor tier, obtainability considered when hand-picking. |
-| **Generated (Paladin 10–69)** | **Pure stat score** from per-spec weights — obtainability is **not** gated. A level-60 chest can legitimately be a Naxxramas drop if stats win. Procs and suffixes are priced where data exists. |
+| **Generated (all classes 10–69)** | **Pure stat score** from per-spec weights — obtainability is **not** gated beyond faction/rep/vendor locks in the pipeline. A level-60 chest can legitimately be a Naxxramas drop if stats win. Procs and suffixes are priced where data exists. |
 
-At **runtime**, `Compare.lua` still ranks visible candidates by item level vs equipped, armor-tier penalties, and small source bonuses — it does **not** re-run the full stat-weight model. Generated rows arrive with `curatedRank` set from the pipeline; curated rows use `curatedRank` from import. **`Compare.lua`’s ≥8 ilvl lower-tier armor rule applies to runtime re-ranking only**, not to how generated picks were chosen (those used armour multipliers in the pipeline).
+At **runtime**, `Compare.lua` ranks most generated candidates by item level vs equipped, armor-tier penalties, and small source bonuses — it does **not** re-run the full stat-weight model. Generated rows arrive with `curatedRank` from the pipeline; hand-curated rows keep author rank. **Exception:** bands with `origin="guide"` (level-60 guide tiers) **must never be re-sorted by score** — `curatedRank` is authoritative there; score is context only (e.g. Best vs Best Mitigation). **`Compare.lua`’s ≥8 ilvl lower-tier armor rule applies to runtime re-ranking only**, not to how generated picks were chosen (those used armour multipliers in the pipeline).
+
+**Faction gating (pipeline):** wrong-faction rows are stripped at emit time using vendor stock analysis (`npc_faction.json`), PvP prefix rules (`pvp_prefix_faction.json`), reputation exclusivity (mirror pairs + hand-verified names like Tranquillien), and quest/class locks on adjacent rows — **not** sub-zone lists alone (shared camps can host both factions’ vendors).
 
 ---
 
 ## Goal
 
-Show the **top 3 upgrades per slot** for the player’s **class, faction, and spec** — nothing they cannot equip. **How** those three are chosen depends on the data source (see above): curated bands favour realistic, level-appropriate picks; generated Paladin 10–69 favours stat score regardless of obtainability.
+Show the **top 3 upgrades per slot** for the player’s **class, faction, and spec** — nothing they cannot equip. **How** those three are chosen depends on the data source (see above): curated bands favour realistic, level-appropriate picks; generated 10–69 favours stat score regardless of obtainability (with pipeline faction/rep gates applied).
 
 ## Curation workflow (primary)
 
@@ -652,12 +654,11 @@ Re-run after any `instructions` / `npc` / token-boss edits. Wowhead tooltip API 
 
 | Band | Status |
 |------|--------|
-| **Level 1–9 Alliance** | Curated Warrior & Paladin; ~192 Alliance-locked + faction-agnostic entries |
-| **Level 1–9 Horde Paladin** | Generated (`paladinHorde1to9`) |
-| **Level 10–69 Paladin** | Generated (`paladinPicks`) — all three specs, both factions |
-| **Level 10–69 other classes** | Empty (generated pipeline not run yet) |
+| **Level 1–9 Alliance** | Curated Warrior & Paladin; early generated bands for Hunter, Druid, Shaman, Rogue (`*Early1to9`) |
+| **Level 1–9 Horde** | Generated Horde bands: Paladin (`paladinHorde1to9`), Warrior (`warriorHorde1to9`); early 1–9 for Hunter/Druid/Shaman/Rogue |
+| **Level 10–69 all six classes** | Generated (`*Picks`) — all specs per class, faction-gated rows in pipeline |
 | **Level 70** | Curated Phase 3 BiS — **all 21 specs**, all classes (~891 entries) |
-| **Horde leveling (non-Paladin)** | Faction-agnostic curated items still show; no Horde-specific generated bands yet |
+| **Total** | **48,244** entries (1,178 curated + 47,066 generated) — `node scripts/verify-generated-bis.mjs` |
 
 Empty Neck / Trinket / Head slots while leveling usually mean **missing data** for that class/band, not a broken addon.
 
@@ -686,14 +687,17 @@ Classic **Phase 6 (Naxx)** BiS is **not** in the Hoizame AtlasLoot zip. AtlasLoo
 | `Spec.lua` | Preview spec choice overwrote real `specByClass` | `settings.preview.specByClass` when preview on |
 | `Equip.lua` | Hunter/Shaman preferred Plate at 40 | `unlockMail = 40` → Mail |
 | `Log.lua` | `arrowBtn` undefined → duplicate spec arrow | Removed bad assignment |
+| Pipeline | Faction/rep leaks in generated 10–69 (BG sets, Tranquillien, mirrored reps) | Vendor/rep emit gates; `npc_faction.json` |
+| `Compare.lua` | Level-60 guide bands re-sorted by runtime score | `origin="guide"` keeps pipeline `curatedRank` |
+| `Data.lua` | Rogue item facts missing from `GetItemFact` | Added `rogueItemFacts` / `rogueEarly1to9Facts` |
 
 ### Open (not yet addressed)
 
 - Hunt state is **account-wide** (`SavedVariables`, not per-character) — `/gq wipe data` wording may mislead
+- Tracker shows tracked hunts without re-checking current class/faction (cross-class hunts can linger)
 - `GET_ITEM_INFO_RECEIVED` registered on multiple frames without central debouncing (login/zoning cost)
 - Quest-log reward arrows use retail frame names (likely inert on TBC 2.5)
 - `Indicator.lua` `GetChildren()` unpacking; trainer frame allocation churn
-- Generated BiS for classes other than Paladin (10–69)
 - Repo root `_paladin-bis-extract/` is a superseded merge bundle — safe to delete; canonical files live under `GearQuest/_generated/`
 
 ### Code review reference

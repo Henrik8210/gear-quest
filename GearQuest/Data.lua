@@ -16724,11 +16724,13 @@ function GQ.Data:GetItemFact(itemId)
         self.hunterItemFacts,
         self.druidItemFacts,
         self.shamanItemFacts,
+        self.rogueItemFacts,
         self.paladinHorde1to9Facts,
         self.warriorHorde1to9Facts,
         self.hunterEarly1to9Facts,
         self.druidEarly1to9Facts,
         self.shamanEarly1to9Facts,
+        self.rogueEarly1to9Facts,
     }
 
     for i = 1, #tables do
@@ -17521,23 +17523,34 @@ function GQ.Data:GetEntryById(id)
     if not id then
         return nil
     end
-    if self.byId then
+    if self.byId and self.byId[id] then
         return self.byId[id]
     end
-    for _, entry in ipairs(self.entries) do
+    for _, entry in ipairs(self.entries or {}) do
         if entry.id == id then
             return entry
         end
     end
+    return self:GetNotableEntryById(id)
 end
 
 function GQ.Data:InvalidatePlayerBandCache()
     self:InvalidateQueryCache()
 end
 
+function GQ.Data:InvalidateSpecCache()
+    self._queryCache = nil
+    self._activeBandCache = nil
+end
+
 function GQ.Data:InvalidateQueryCache()
     self._queryCache = nil
     self._activeBandCache = nil
+    self._notableEntryCache = nil
+end
+
+function GQ.Data:InvalidateClassCache()
+    self:InvalidateQueryCache()
     self.notableBySlot = nil
     self._notableBySlotClass = nil
 end
@@ -17556,6 +17569,7 @@ function GQ.Data:EnsureQueryCache()
         key = cacheKey,
         candidates = {},
         topUpgrades = {},
+        notables = {},
         activeBandMin = nil,
     }
 end
@@ -17895,7 +17909,57 @@ function GQ.Data:BuildNotableEntry(row, facts, classFile)
         notable = true,
     }
 
-    return self:EnrichEntrySuffix(entry)
+    self._notableEntryCache = self._notableEntryCache or {}
+    local cached = self._notableEntryCache[entry.id]
+    if cached then
+        return cached
+    end
+
+    entry = self:EnrichEntrySuffix(entry)
+    self._notableEntryCache[entry.id] = entry
+    return entry
+end
+
+function GQ.Data:GetNotableEntryById(id)
+    if type(id) ~= "string" or not id:match("^notable:") then
+        return nil
+    end
+
+    local classFile, itemId, slot, minL, spec, faction = id:match(
+        "^notable:([^:]+):(%d+):([^:]+):(%d+):([^:]*):([^:]*)$"
+    )
+    if not classFile then
+        return nil
+    end
+
+    itemId = tonumber(itemId)
+    minL = tonumber(minL)
+    spec = spec ~= "" and spec or nil
+    faction = faction ~= "" and faction or nil
+
+    local src = NOTABLE_CLASS[classFile]
+    if not src then
+        return nil
+    end
+
+    local rows = self[src.rows]
+    local facts = self[src.facts]
+    if not rows or not facts then
+        return nil
+    end
+
+    for i = 1, #rows do
+        local row = rows[i]
+        if row[1] == itemId
+            and row[2] == slot
+            and row[3] == minL
+            and (row[5] or nil) == spec
+            and (row[6] or nil) == faction then
+            return self:BuildNotableEntry(row, facts, classFile)
+        end
+    end
+
+    return nil
 end
 
 function GQ.Data:EnsureNotableBySlot(classFile)
@@ -17904,6 +17968,7 @@ function GQ.Data:EnsureNotableBySlot(classFile)
         return
     end
 
+    self._notableEntryCache = nil
     self.notableBySlot = {}
     self._notableBySlotClass = classFile
 
@@ -17939,6 +18004,12 @@ function GQ.Data:GetNotableForSlot(slotName)
     end
 
     slotName = self:NormalizeSlotName(slotName)
+    self:EnsureQueryCache()
+    local cachedNotables = self._queryCache.notables[slotName]
+    if cachedNotables then
+        return cachedNotables
+    end
+
     self:EnsureNotableBySlot(classFile)
     local slotRows = self.notableBySlot[slotName]
     if not slotRows then
@@ -17954,7 +18025,9 @@ function GQ.Data:GetNotableForSlot(slotName)
     end
 
     results = self:FilterToActiveBand(results)
-    return self:DeduplicateEntriesByItem(results)
+    results = self:DeduplicateEntriesByItem(results)
+    self._queryCache.notables[slotName] = results
+    return results
 end
 
 function GQ.Data:GetActiveBandMinLevel()

@@ -106,20 +106,41 @@ function GQ.Compare:RankEntries(entries, slotName, maxResults)
         table.insert(scored, { entry = entry, score = score, itemIlvl = itemIlvl })
     end
 
+    local function PrefersRank(entry)
+        if not entry then
+            return false
+        end
+        if entry.origin == "guide" then
+            return true
+        end
+        return not entry.generated
+    end
+
     table.sort(scored, function(a, b)
         local rankA = a.entry.curatedRank
         local rankB = b.entry.curatedRank
-        if rankA and rankB and rankA ~= rankB then
-            return rankA < rankB
+        local aRanked = PrefersRank(a.entry)
+        local bRanked = PrefersRank(b.entry)
+
+        -- Hand-curated and origin="guide" rows keep pipeline rank. Other generated
+        -- picks re-rank at runtime by upgrade score so ilvl beats stale slot order.
+        if aRanked and bRanked then
+            if rankA and rankB and rankA ~= rankB then
+                return rankA < rankB
+            end
+            if rankA and not rankB then
+                return true
+            end
+            if rankB and not rankA then
+                return false
+            end
         end
-        if rankA and not rankB then
-            return true
-        end
-        if rankB and not rankA then
-            return false
-        end
+
         if a.score ~= b.score then
             return a.score > b.score
+        end
+        if rankA and rankB and rankA ~= rankB then
+            return rankA < rankB
         end
         return a.itemIlvl > b.itemIlvl
     end)

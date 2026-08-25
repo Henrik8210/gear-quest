@@ -2,6 +2,12 @@
 
 ## v0.1.0 (unreleased)
 
+- **Faction / reputation gating (pipeline):** vendor- and rep-based faction locks for generated 10–69 data (~7,587 cells corrected, ~7–8% per class); Tranquillien rep, BG reward sets (Highlander’s / Defiler’s, AV runes/cloaks), mirror-paired Outland reps; `npc_faction.json` added; zone-only gating avoided (e.g. Mor’shan Base Camp hosts both BG quartermasters)
+- **Generated BiS import:** all six classes 10–69 refreshed — **47,066 generated + 1,178 curated = 48,244** entries; verify script targets updated
+- **Compare.lua:** preserve `curatedRank` for `origin="guide"` level-60 bands (never re-sort by score); runtime ilvl re-ranking for other generated picks
+- **Rogue:** Assassination and Subtlety specs enabled (removed coming later)
+- **Performance:** async indicator cache rebuild; staggered `RefreshUI`; spec cache invalidation without full notable re-index
+- **Fixes:** notable entry lookup by id; tracker text wrap/clipping; `GetItemFact` includes rogue fact tables
 - **Paladin generated BiS (10–69):** stat-weight pipeline, `DataAdapter.lua`, `_generated/` tables (~9,180 + 221 Horde 1–9 picks)
 - **Notables:** proc-driven items beside top 3 (Paladin); hidden at level 70
 - **Log UI:** spec picker hover highlight; notable `!` icon; suffix/origin/proc in detail; list truncation; shift/ctrl+click item links

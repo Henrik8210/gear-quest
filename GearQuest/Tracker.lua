@@ -20,6 +20,8 @@ local RESIZE_BORDER_THICKNESS = 2
 local RESIZE_BORDER_COLOR = { 1, 1, 1, 0.6 }
 local SCROLLBAR_WIDTH = 4
 local SCROLLBAR_PAD = 2
+local TEXT_INSET = 10
+local TEXT_PAD_LEFT = 2
 local SCROLLBAR_HIDE_DELAY = 1.2
 local SCROLLBAR_MIN_THUMB = 18
 local SCROLL_STEP = 24
@@ -109,6 +111,20 @@ local function CreateFontStringWithFallback(parent, candidates)
         end
     end
     return parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+end
+
+local function ConfigureWrappedFontString(fs)
+    if not fs then
+        return
+    end
+
+    fs:SetJustifyH("LEFT")
+    fs:SetWordWrap(true)
+    -- Without this, WoW truncates the last characters when a word barely
+    -- exceeds the set width instead of wrapping it to the next line.
+    if fs.SetNonSpaceWrap then
+        fs:SetNonSpaceWrap(true)
+    end
 end
 
 local function CreateEdgeTexture(border)
@@ -477,19 +493,21 @@ function GQ.Tracker:ApplyFrameWidth(width)
 end
 
 function GQ.Tracker:ApplyTextWidth(textWidth)
-    textWidth = math.max(MIN_WIDTH - self:GetScrollGutter(), textWidth or DEFAULT_WIDTH)
+    textWidth = math.max(MIN_WIDTH - self:GetScrollGutter(), (textWidth or DEFAULT_WIDTH) - TEXT_INSET - TEXT_PAD_LEFT)
 
     if self.contentInner then
-        self.contentInner:SetWidth(textWidth)
+        self.contentInner:SetWidth(textWidth + TEXT_PAD_LEFT)
     end
     if self.entryRows then
         for _, row in ipairs(self.entryRows) do
-            row:SetWidth(textWidth)
+            row:SetWidth(textWidth + TEXT_PAD_LEFT)
             if row.name then
                 row.name:SetWidth(textWidth)
+                ConfigureWrappedFontString(row.name)
             end
             if row.desc then
                 row.desc:SetWidth(textWidth)
+                ConfigureWrappedFontString(row.desc)
             end
         end
     end
@@ -669,16 +687,14 @@ function GQ.Tracker:EnsureEntryRows(count)
 
         row.name = CreateFontString(row, "GameFontNormal")
         row.name:SetWidth(width)
-        row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
-        row.name:SetJustifyH("LEFT")
-        row.name:SetWordWrap(true)
+        row.name:SetPoint("TOPLEFT", row, "TOPLEFT", TEXT_PAD_LEFT, 0)
+        ConfigureWrappedFontString(row.name)
         row.name:SetTextColor(ENTRY_NAME_COLOR[1], ENTRY_NAME_COLOR[2], ENTRY_NAME_COLOR[3])
 
         row.desc = CreateFontString(row, "GameFontNormal")
         row.desc:SetWidth(width)
         row.desc:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
-        row.desc:SetJustifyH("LEFT")
-        row.desc:SetWordWrap(true)
+        ConfigureWrappedFontString(row.desc)
         row.desc:SetTextColor(ENTRY_DESC_COLOR[1], ENTRY_DESC_COLOR[2], ENTRY_DESC_COLOR[3], ENTRY_DESC_COLOR[4])
 
         row:SetScript("OnClick", function(self)

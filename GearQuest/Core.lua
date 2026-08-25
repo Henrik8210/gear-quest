@@ -107,50 +107,71 @@ function GQ:GetEffectiveLevel()
     return self.Preview:GetEffectiveLevel()
 end
 
-function GQ:RefreshUI()
+function GQ:RefreshUI(opts)
+    opts = opts or {}
     if self._refreshScheduled then
         return
     end
 
     self._refreshScheduled = true
 
-    local function runRefresh()
+    local function runHeavy()
         self._refreshScheduled = false
+
+        local function afterIndicatorCache()
+            if self.Log and self.Log.frame and self.Log.frame:IsShown() then
+                pcall(function()
+                    self.Log:Refresh()
+                end)
+            end
+
+            if self.Popup and self.Popup.container and self.Popup.container:IsShown() then
+                pcall(function()
+                    if self.Popup.activeSlotName and self.Popup.activeSlotButton then
+                        self.Popup:ShowForSlot(self.Popup.activeSlotName, self.Popup.activeSlotButton)
+                    else
+                        self.Popup:Hide()
+                    end
+                end)
+            end
+
+            if self.Tracker then
+                pcall(function()
+                    self.Tracker:Refresh()
+                end)
+            end
+        end
 
         if self.Indicator then
             pcall(function()
-                self.Indicator:RebuildCache()
-                self.Indicator:RefreshAll()
-            end)
-        end
-
-        if self.Log and self.Log.frame and self.Log.frame:IsShown() then
-            pcall(function()
-                self.Log:Refresh()
-            end)
-        end
-
-        if self.Popup and self.Popup.container and self.Popup.container:IsShown() then
-            pcall(function()
-                if self.Popup.activeSlotName and self.Popup.activeSlotButton then
-                    self.Popup:ShowForSlot(self.Popup.activeSlotName, self.Popup.activeSlotButton)
+                if self.Indicator.RebuildCacheAsync then
+                    self.Indicator:RebuildCacheAsync(afterIndicatorCache)
                 else
-                    self.Popup:Hide()
+                    self.Indicator:RebuildCache()
+                    self.Indicator:RefreshAll()
+                    afterIndicatorCache()
                 end
             end)
-        end
-
-        if self.Tracker then
-            pcall(function()
-                self.Tracker:Refresh()
-            end)
+        else
+            afterIndicatorCache()
         end
     end
 
+    if self.Log then
+        pcall(function()
+            if self.Log.UpdateSpecButton then
+                self.Log:UpdateSpecButton()
+            end
+            if self.Log.frame and self.Log.frame:IsShown() and self.Log.UpdateFooterButtons then
+                self.Log:UpdateFooterButtons()
+            end
+        end)
+    end
+
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, runRefresh)
+        C_Timer.After(0, runHeavy)
     else
-        runRefresh()
+        runHeavy()
     end
 end
 
