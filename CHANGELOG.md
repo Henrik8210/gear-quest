@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.0-beta.2
+
+- Fix CurseForge packager TOC discovery (addon in `GearQuest/` subfolder).
+
 ## v0.1.0-beta
 
 First CurseForge beta for **WoW 2.5.6** (TBC Anniversary).
