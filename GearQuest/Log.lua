@@ -152,7 +152,7 @@ local function BuildListItemTags(entry, status, includeNewLabel)
     return tags
 end
 
-local function FormatActiveListItemTextTruncated(fontString, name, entry, status, includeNewLabel, maxWidth)
+local function FormatListItemText(fontString, name, entry, status, includeNewLabel, maxWidth, r, g, b)
     local tags = BuildListItemTags(entry, status, includeNewLabel)
 
     fontString:SetText(tags)
@@ -162,14 +162,18 @@ local function FormatActiveListItemTextTruncated(fontString, name, entry, status
     TruncateFontStringToWidth(fontString, name, nameMaxWidth)
     local truncatedName = fontString:GetText() or name
 
-    return truncatedName .. tags
+    local hex = string.format("%02x%02x%02x",
+        math.floor(r * 255 + 0.5),
+        math.floor(g * 255 + 0.5),
+        math.floor(b * 255 + 0.5))
+    return "|cff" .. hex .. truncatedName .. "|r" .. tags
 end
 
 local function SetListRowItemText(row, leftInset, name, entry, status, showNewLabel, r, g, b)
     local maxWidth = GetListRowTextMaxWidth(row, leftInset)
-    local text = FormatActiveListItemTextTruncated(row.text, name, entry, status, showNewLabel, maxWidth)
+    local text = FormatListItemText(row.text, name, entry, status, showNewLabel, maxWidth, r, g, b)
     row.text:SetText(text)
-    row.text:SetTextColor(r, g, b)
+    row.text:SetTextColor(1, 1, 1)
 end
 
 local SPEC_PICKER_WIDTH = 188
@@ -205,6 +209,7 @@ local function BringLogWindowToFront(frame)
 end
 local TAB_GROUP_WIDTH = (88 * 2) + 4
 local DETAIL_TEXT_COLOR = { 0.13, 0.09, 0.04 }
+local LORE_TEXT_COLOR = { 0.20, 0.15, 0.10 }
 local DETAIL_TEXT_HEX = "21160a"
 local QUEST_DETAIL_TITLE_FONTS = {
     "QuestFont_Large", "QuestFont", "GameFontHighlight", "GameFontNormal",
@@ -1320,6 +1325,20 @@ function GQ.Log:ScheduleAutoCompletionCheck()
     end
 end
 
+function GQ.Log:EnsureDetailLore(frame)
+    if not frame or not frame.detailChild or frame.detailLore then
+        return
+    end
+
+    frame.detailLore = CreateFontStringWithFallback(frame.detailChild, QUEST_DETAIL_BODY_FONTS)
+    frame.detailLore:SetPoint("TOPLEFT", frame.detailTitle, "BOTTOMLEFT", 0, -8)
+    frame.detailLore:SetPoint("RIGHT", frame.detailChild, "RIGHT", -8, 0)
+    frame.detailLore:SetJustifyH("LEFT")
+    frame.detailLore:SetWordWrap(true)
+    frame.detailLore:SetTextColor(LORE_TEXT_COLOR[1], LORE_TEXT_COLOR[2], LORE_TEXT_COLOR[3])
+    frame.detailLore:Hide()
+end
+
 function GQ.Log:EnsureDetailReward(frame)
     if not frame or not frame.detailChild then
         return
@@ -1403,6 +1422,9 @@ function GQ.Log:MeasureDetailContentHeight()
 
     if self.frame.detailTitle and self.frame.detailTitle:IsShown() then
         height = height + (self.frame.detailTitle:GetStringHeight() or 0) + 16
+    end
+    if self.frame.detailLore and self.frame.detailLore:IsShown() then
+        height = height + (self.frame.detailLore:GetStringHeight() or 0) + 12
     end
     if self.frame.detailHeader and self.frame.detailHeader:IsShown() then
         height = height + (self.frame.detailHeader:GetStringHeight() or 0) + 8
@@ -2022,6 +2044,7 @@ function GQ.Log:BindExistingFrame(frame)
     frame.detailChild = frame.detailChild or _G.GearQuestLogDetailScrollChild
     frame.listInset = frame.listInset or frame
     self:EnsureTabBar(frame)
+    self:EnsureDetailLore(frame)
     self:EnsureDetailReward(frame)
     LayoutDetailScroll(frame)
     if frame.trackBtn and frame.untrackBtn and frame.exitBtn then
@@ -2146,6 +2169,14 @@ function GQ.Log:Init()
     frame.detailTitle:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
     frame.detailTitle:Hide()
 
+    frame.detailLore = CreateFontStringWithFallback(frame.detailChild, QUEST_DETAIL_BODY_FONTS)
+    frame.detailLore:SetPoint("TOPLEFT", frame.detailTitle, "BOTTOMLEFT", 0, -8)
+    frame.detailLore:SetPoint("RIGHT", frame.detailChild, "RIGHT", -8, 0)
+    frame.detailLore:SetJustifyH("LEFT")
+    frame.detailLore:SetWordWrap(true)
+    frame.detailLore:SetTextColor(LORE_TEXT_COLOR[1], LORE_TEXT_COLOR[2], LORE_TEXT_COLOR[3])
+    frame.detailLore:Hide()
+
     frame.detailHeader = CreateFontStringWithFallback(frame.detailChild, QUEST_DETAIL_HEADER_FONTS)
     frame.detailHeader:SetPoint("TOPLEFT", frame.detailTitle, "BOTTOMLEFT", 0, -16)
     frame.detailHeader:SetText("DESCRIPTION")
@@ -2160,6 +2191,7 @@ function GQ.Log:Init()
     frame.detailBody:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
     frame.detailBody:Hide()
 
+    self:EnsureDetailLore(frame)
     self:EnsureDetailReward(frame)
 
     frame.detailEmpty = CreateFontStringWithFallback(frame.detailChild, QUEST_DETAIL_BODY_FONTS)
@@ -2203,6 +2235,9 @@ function GQ.Log:SetDetailEmpty(empty)
         self.frame.detailEmpty:Show()
         self.frame.detailHeader:Hide()
         self.frame.detailTitle:Hide()
+        if self.frame.detailLore then
+            self.frame.detailLore:Hide()
+        end
         self.frame.detailBody:Hide()
         if self.frame.detailRewardHeader then
             self.frame.detailRewardHeader:Hide()
@@ -2224,6 +2259,10 @@ function GQ.Log:ClearDetail()
     end
     self.frame.detailTitle:SetText("")
     self.frame.detailBody:SetText("")
+    if self.frame.detailLore then
+        self.frame.detailLore:SetText("")
+        self.frame.detailLore:Hide()
+    end
     self:UpdateDetailReward(nil)
     self:SetDetailEmpty(true)
 end
@@ -2246,7 +2285,7 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         row.text:ClearAllPoints()
         row.text:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
         row.text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-        row.text:SetText(GQ.Data:SlotLabel(slotName))
+        row.text:SetText(GQ.Data:SlotHeaderLabel(slotName))
         row.text:SetTextColor(1, 0.82, 0)
         row.highlight:Hide()
         row:SetScript("OnClick", function()
@@ -2311,17 +2350,8 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         row.text:SetPoint("LEFT", row, "LEFT", LIST_ROW_ITEM_LEFT, 0)
         row.text:SetPoint("RIGHT", row, "RIGHT", -LIST_ROW_RIGHT_PAD, 0)
 
-        if onCompletedTab or isObtained or status == "completed" then
-            TruncateFontStringToWidth(
-                row.text,
-                name,
-                GetListRowTextMaxWidth(row, LIST_ROW_ITEM_LEFT)
-            )
-            row.text:SetTextColor(r, g, b)
-        else
-            local showNewLabel = not onCompletedTab
-            SetListRowItemText(row, LIST_ROW_ITEM_LEFT, name, entry, status, showNewLabel, r, g, b)
-        end
+        local showNewLabel = not onCompletedTab and not isObtained and status ~= "completed"
+        SetListRowItemText(row, LIST_ROW_ITEM_LEFT, name, entry, status, showNewLabel, r, g, b)
 
         UpdateListRowHighlight(row)
         row:SetScript("OnClick", function()
@@ -2442,11 +2472,28 @@ function GQ.Log:ApplyEntryDetail(entry)
         return
     end
 
+    self:EnsureDetailLore(self.frame)
+
     local itemName = GQ.Data:GetEntryDisplayName(entry) or ("Item " .. entry.itemId)
 
     self:SetDetailEmpty(false)
     self.frame.detailTitle:SetText("|cff" .. DETAIL_TEXT_HEX .. itemName:upper() .. "|r")
     self.frame.detailTitle:SetTextColor(DETAIL_TEXT_COLOR[1], DETAIL_TEXT_COLOR[2], DETAIL_TEXT_COLOR[3])
+
+    local lore = entry.lore
+    if self.frame.detailLore then
+        if lore and lore ~= "" then
+            self.frame.detailLore:SetText(lore)
+            self.frame.detailLore:Show()
+            self.frame.detailHeader:ClearAllPoints()
+            self.frame.detailHeader:SetPoint("TOPLEFT", self.frame.detailLore, "BOTTOMLEFT", 0, -12)
+        else
+            self.frame.detailLore:SetText("")
+            self.frame.detailLore:Hide()
+            self.frame.detailHeader:ClearAllPoints()
+            self.frame.detailHeader:SetPoint("TOPLEFT", self.frame.detailTitle, "BOTTOMLEFT", 0, -16)
+        end
+    end
 
     local lines = self:BuildDetailLines(entry)
     self.frame.detailBody:SetText(table.concat(lines, "\n"))

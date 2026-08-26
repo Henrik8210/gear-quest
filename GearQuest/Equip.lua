@@ -110,6 +110,10 @@ function GQ.Equip:GetEquipSlot(itemId)
     return equipSlot
 end
 
+function GQ.Equip:IsTwoHandWeapon(itemId)
+    return self:GetEquipSlot(itemId) == "INVTYPE_2HWEAPON"
+end
+
 local RECOMMENDATION_SLOTS = {
     MainHand = true,
     SecondaryHand = true,

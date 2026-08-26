@@ -310,6 +310,7 @@ function GQ.Popup:ApplyIconData(icon, entry)
     icon.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
 
     local r, g, b = GetItemQualityColor(quality or 1)
+    icon.icon:SetVertexColor(1, 1, 1)
     icon.border:SetVertexColor(r, g, b)
     self:UpdateObtainCheckmark(icon, entry)
 end

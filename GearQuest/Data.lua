@@ -22781,6 +22781,58 @@ function GQ.Data:GetTopUpgradesForSlot(slotName, maxResults)
     return results
 end
 
+function GQ.Data:GetWeaponRouteForBand()
+    for _, slot in ipairs({ "MainHand", "SecondaryHand" }) do
+        for _, entry in ipairs(self:GetCandidatesForSlot(slot)) do
+            if entry.route then
+                return entry.route
+            end
+        end
+    end
+    return nil
+end
+
+function GQ.Data:GetWeaponRouteLabel(route)
+    route = route or self:GetWeaponRouteForBand()
+    if not route then
+        return nil
+    end
+    local classFile = GQ:GetEffectiveClass()
+    local spec = GQ:GetEffectiveSpec()
+    local dualWieldTerms = classFile == "HUNTER"
+        or (classFile == "SHAMAN" and spec == "enhancement")
+    if route == "twohand" then
+        return dualWieldTerms and "Two-hand build" or "Staff build"
+    end
+    return dualWieldTerms and "Dual-wield build" or "One-hand + off-hand"
+end
+
+function GQ.Data:EntryOffWeaponRoute(entry, slotName)
+    if not entry or not entry.route then
+        return false
+    end
+    slotName = self:NormalizeSlotName(slotName)
+    if entry.route == "twohand" then
+        return slotName == "SecondaryHand"
+    end
+    if entry.route == "onehand" and slotName == "MainHand" and GQ.Equip then
+        return GQ.Equip:IsTwoHandWeapon(entry.itemId)
+    end
+    return false
+end
+
+function GQ.Data:SlotHeaderLabel(slotName)
+    slotName = self:NormalizeSlotName(slotName)
+    local label = self:SlotLabel(slotName)
+    if slotName == "MainHand" or slotName == "SecondaryHand" then
+        local routeLabel = self:GetWeaponRouteLabel()
+        if routeLabel then
+            return label .. " — " .. routeLabel
+        end
+    end
+    return label
+end
+
 function GQ.Data:SlotLabel(slotName)
     slotName = self:NormalizeSlotName(slotName)
     if slotName == "Ranged" then
