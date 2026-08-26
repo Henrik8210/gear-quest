@@ -18,5 +18,7 @@ jobs:
           fetch-depth: 0
 
       - uses: BigWigsMods/packager@v2
+        with:
+          args: -g 2.5.6
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}

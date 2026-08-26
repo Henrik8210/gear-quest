@@ -1,6 +1,12 @@
 # Changelog
 
-## v0.1.0 (unreleased)
+## v0.1.0-beta
+
+First CurseForge beta for **WoW 2.5.6** (TBC Anniversary).
+
+### Bug fixes
+- **Ranged slot:** wire `CharacterRangedSlot` for BiS bar (librams, idols, totems, wands, bows/guns).
+- **Tracker:** only show tracked hunts for the current character's class, level band, and faction.
 
 ### BiS display order (R39)
 - **`Compare.lua`:** Trust pipeline `curatedRank` for every class with a rank — removes runtime ilvl re-sort that showed Edgemaster's third on L47 fury Hands despite rank 1 in data. L60 `origin="guide"` bands still follow guide order; notables (no rank) stay last.

@@ -22709,6 +22709,14 @@ GQ.Data.BASE_SLOTS = {
     "MainHand", "SecondaryHand",
 }
 
+-- CharacterFrame slot buttons (Character{Name}Slot). Ranged is one UI slot for all
+-- class relics: librams/relics, idols, totems, wands, bows/guns/crossbows.
+GQ.Data.PAPER_DOLL_SLOTS = {
+    "Head", "Neck", "Shoulder", "Back", "Chest", "Wrist", "Hands",
+    "Waist", "Legs", "Feet", "Finger0", "Finger1", "Trinket0", "Trinket1",
+    "MainHand", "SecondaryHand", "Ranged",
+}
+
 GQ.Data.CLASS_RANGED = {
     WARRIOR = true,
     ROGUE = true,
@@ -22845,6 +22853,9 @@ function GQ.Data:SlotLabel(slotName)
         end
         if classFile == "PALADIN" then
             return "Relic"
+        end
+        if classFile == "MAGE" or classFile == "PRIEST" or classFile == "WARLOCK" then
+            return "Wand"
         end
     end
     return self.SLOT_LABELS[slotName] or slotName

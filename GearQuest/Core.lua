@@ -9,7 +9,7 @@ end
 GQ = GQ or {}
 _G.GearQuest = GQ
 
-GQ.VERSION = "0.1.0"
+GQ.VERSION = "0.1.0-beta"
 GQ.ADDON_NAME = ADDON_NAME
 
 GearQuestDB = GearQuestDB or {

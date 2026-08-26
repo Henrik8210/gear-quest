@@ -170,7 +170,10 @@ function GQ.Tracker:GetTrackedEntries()
     for id, record in pairs(GearQuestDB.hunts or {}) do
         if NormalizeHuntStatus(record.status) == "tracked" then
             local entry = GQ.Data:GetEntryById(id)
-            if entry then
+            if entry
+                and GQ.Data:EntryMatchesPlayerBand(entry)
+                and GQ.Log:EntryMatchesTrackedHunt(entry)
+                and not GQ.Log:IsEntryObtained(id) then
                 results[#results + 1] = {
                     entry = entry,
                     trackedAt = record.trackedAt or 0,
