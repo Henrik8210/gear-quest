@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.0-beta.3
+
+- Fix CurseForge zip layout (`move-folders: GearQuest/GearQuest`).
+
 ## v0.1.0-beta.2
 
 - Fix CurseForge packager TOC discovery (addon in `GearQuest/` subfolder).
