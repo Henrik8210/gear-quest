@@ -25,6 +25,10 @@ _generated\Data.Rogue.generated.lua
 _generated\Data.Rogue.Early.1to9.generated.lua
 _generated\Data.Priest.generated.lua
 _generated\Data.Priest.Early.1to9.generated.lua
+_generated\Data.Warlock.generated.lua
+_generated\Data.Warlock.Early.1to9.generated.lua
+_generated\Data.Mage.generated.lua
+_generated\Data.Mage.Early.1to9.generated.lua
 DataAdapter.lua
 Compare.lua
 Indicator.lua

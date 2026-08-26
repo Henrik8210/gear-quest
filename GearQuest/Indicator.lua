@@ -1040,7 +1040,7 @@ function GQ.Indicator:RebuildCacheForSlot(slotName)
     end
 end
 
-local REBUILD_SLOTS_PER_FRAME = 3
+local REBUILD_SLOTS_PER_FRAME = 5
 
 function GQ.Indicator:RebuildCacheAsync(onComplete)
     if not GQ.Data or not GQ.Data.GetSlotsForClass then

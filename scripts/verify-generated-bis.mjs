@@ -126,10 +126,40 @@ const SOURCES = [
     factionInRow: true,
     file: "_generated/Data.Priest.Early.1to9.generated.lua",
   },
+  {
+    class: "WARLOCK",
+    picks: "warlockPicks",
+    facts: "warlockItemFacts",
+    hasSpec: true,
+    file: "_generated/Data.Warlock.generated.lua",
+  },
+  {
+    class: "WARLOCK",
+    picks: "warlockEarly1to9",
+    facts: "warlockEarly1to9Facts",
+    hasSpec: false,
+    factionInRow: true,
+    file: "_generated/Data.Warlock.Early.1to9.generated.lua",
+  },
+  {
+    class: "MAGE",
+    picks: "magePicks",
+    facts: "mageItemFacts",
+    hasSpec: true,
+    file: "_generated/Data.Mage.generated.lua",
+  },
+  {
+    class: "MAGE",
+    picks: "mageEarly1to9",
+    facts: "mageEarly1to9Facts",
+    hasSpec: false,
+    factionInRow: true,
+    file: "_generated/Data.Mage.Early.1to9.generated.lua",
+  },
 ];
 
-const TARGET_TOTAL = 55355;
-const TARGET_GENERATED = 53916;
+const TARGET_TOTAL = 68520;
+const TARGET_GENERATED = 67033;
 const TARGET_CURATED = TARGET_TOTAL - TARGET_GENERATED;
 
 const dataLua = read("Data.lua");
@@ -191,6 +221,8 @@ console.log("paladin:", countRangedPicks("_generated/Data.Paladin.generated.lua"
 console.log("druid:", countRangedPicks("_generated/Data.Druid.generated.lua", "druidPicks"));
 console.log("shaman:", countRangedPicks("_generated/Data.Shaman.generated.lua", "shamanPicks"));
 console.log("priest:", countRangedPicks("_generated/Data.Priest.generated.lua", "priestPicks"));
+console.log("warlock:", countRangedPicks("_generated/Data.Warlock.generated.lua", "warlockPicks"));
+console.log("mage:", countRangedPicks("_generated/Data.Mage.generated.lua", "magePicks"));
 
 const shamanBody = extractTableBody(read("_generated/Data.Shaman.generated.lua"), "shamanPicks");
 const shamanEarlyBody = extractTableBody(
@@ -226,6 +258,26 @@ const priestEarlyRows = priestEarlyBody.match(/^\s*\{[^}]+\},?/gm) || [];
 console.log(
   "priestEarly1to9 rows missing faction:",
   priestEarlyRows.filter((line) => !line.includes('faction="')).length,
+);
+
+const warlockEarlyBody = extractTableBody(
+  read("_generated/Data.Warlock.Early.1to9.generated.lua"),
+  "warlockEarly1to9",
+);
+const warlockEarlyRows = warlockEarlyBody.match(/^\s*\{[^}]+\},?/gm) || [];
+console.log(
+  "warlockEarly1to9 rows missing faction:",
+  warlockEarlyRows.filter((line) => !line.includes('faction="')).length,
+);
+
+const mageEarlyBody = extractTableBody(
+  read("_generated/Data.Mage.Early.1to9.generated.lua"),
+  "mageEarly1to9",
+);
+const mageEarlyRows = mageEarlyBody.match(/^\s*\{[^}]+\},?/gm) || [];
+console.log(
+  "mageEarly1to9 rows missing faction:",
+  mageEarlyRows.filter((line) => !line.includes('faction="')).length,
 );
 
 let maxLevel = 0;
@@ -268,12 +320,28 @@ if (priestEarlyRows.filter((line) => !line.includes('faction="')).length > 0) {
   console.error("\nFAIL: priest early rows missing faction");
   exitCode = 1;
 }
+if (warlockEarlyRows.filter((line) => !line.includes('faction="')).length > 0) {
+  console.error("\nFAIL: warlock early rows missing faction");
+  exitCode = 1;
+}
+if (mageEarlyRows.filter((line) => !line.includes('faction="')).length > 0) {
+  console.error("\nFAIL: mage early rows missing faction");
+  exitCode = 1;
+}
 if (countRangedPicks("_generated/Data.Shaman.generated.lua", "shamanPicks") === 0) {
   console.error("\nFAIL: shaman relic slot empty");
   exitCode = 1;
 }
 if (countRangedPicks("_generated/Data.Priest.generated.lua", "priestPicks") === 0) {
   console.error("\nFAIL: priest wand slot empty");
+  exitCode = 1;
+}
+if (countRangedPicks("_generated/Data.Warlock.generated.lua", "warlockPicks") === 0) {
+  console.error("\nFAIL: warlock wand slot empty");
+  exitCode = 1;
+}
+if (countRangedPicks("_generated/Data.Mage.generated.lua", "magePicks") === 0) {
+  console.error("\nFAIL: mage wand slot empty");
   exitCode = 1;
 }
 
@@ -309,7 +377,7 @@ for (const src of SOURCES) {
     if (/suffixId=/.test(row[0])) withSuffixId++;
   }
 }
-const notableTables = ["paladinNotable", "warriorNotable", "hunterNotable", "druidNotable", "shamanNotable", "rogueNotable", "priestNotable"];
+const notableTables = ["paladinNotable", "warriorNotable", "hunterNotable", "druidNotable", "shamanNotable", "rogueNotable", "priestNotable", "warlockNotable", "mageNotable"];
 for (const tableName of notableTables) {
   for (const file of fs.readdirSync(path.join(root, "_generated")).filter((f) => f.endsWith(".generated.lua"))) {
     const body = extractTableBody(read("_generated/" + file), tableName);

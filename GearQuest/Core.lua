@@ -111,18 +111,30 @@ end
 function GQ:RefreshUI(opts)
     opts = opts or {}
     if self._refreshScheduled then
+        self._refreshPending = true
         return
     end
 
     self._refreshScheduled = true
+    self._refreshPending = false
+
+    local function finishRefresh()
+        self._refreshScheduled = false
+        if self._refreshPending then
+            self._refreshPending = false
+            self:RefreshUI(opts)
+        end
+    end
 
     local function runHeavy()
-        self._refreshScheduled = false
-
         local function afterIndicatorCache()
             if self.Log and self.Log.frame and self.Log.frame:IsShown() then
                 pcall(function()
-                    self.Log:Refresh()
+                    if self.Log.ScheduleListRefresh then
+                        self.Log:ScheduleListRefresh()
+                    else
+                        self.Log:Refresh()
+                    end
                 end)
             end
 
@@ -141,6 +153,8 @@ function GQ:RefreshUI(opts)
                     self.Tracker:Refresh()
                 end)
             end
+
+            finishRefresh()
         end
 
         if self.Indicator then

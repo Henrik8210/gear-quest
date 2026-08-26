@@ -935,7 +935,15 @@ function GQ.Log:GetCompletedSlotListEntries(slotName)
         end
     end
 
+    -- Same ordering rule as the active list: best BiS first, least-best last. Rows with
+    -- no pipeline rank (notables) fall to the bottom via math.huge. Acquisition time
+    -- survives as the tiebreak between two rows of equal rank.
     table.sort(results, function(a, b)
+        local rankA = a.entry.curatedRank or math.huge
+        local rankB = b.entry.curatedRank or math.huge
+        if rankA ~= rankB then
+            return rankA < rankB
+        end
         if a.completedAt ~= b.completedAt then
             return a.completedAt > b.completedAt
         end

@@ -23,10 +23,10 @@ for (const file of fs.readdirSync(generatedDir).filter((f) => f.endsWith(".gener
   let count = 0;
 
   text = text.replace(
-    /sourceType="world_drop",instructions="Drops from (.+?) \(rare elite\)( in ([^"]+))?\.",npc="([^"]+)"/g,
-    (_, who, _inClause, zoneInText, npc) => {
+    /sourceType="world_drop",instructions="Drops from (.+?) \(rare elite\)(?: in ([^"]+))?\."(?:,zone="([^"]*)")?,npc="([^"]+)"/g,
+    (_, who, zoneInText, zoneField, npc) => {
       count++;
-      const zone = zoneInText || zoneByNpc[npc];
+      const zone = zoneInText || zoneField || zoneByNpc[npc];
       if (zone) {
         return `sourceType="boss_drop",instructions="Drops from ${who} in ${zone}.",zone="${zone}",npc="${npc}"`;
       }

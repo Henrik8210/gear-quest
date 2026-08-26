@@ -271,7 +271,7 @@ GQ.Data.hunterItemFacts = {
     [5299]={name="Gloves of the Moon",sourceType="quest_reward",instructions="Reward from the quest “Cry of the Thunderhawk”. In The Barrens.",zone="The Barrens",questName="Cry of the Thunderhawk"},
     [5309]={name="Privateer Musket",sourceType="quest_reward",instructions="Reward from the quest “The Guns of Northwatch” — pick it over the other choices. In The Barrens.",zone="The Barrens",questName="The Guns of Northwatch"},
     [5314]={name="Boar Hunter's Cape",sourceType="quest_reward",instructions="Reward from the quest “Consumed by Hatred” — pick it over the other choices. In The Barrens.",zone="The Barrens",questName="Consumed by Hatred"},
-    [5319]={name="Bashing Pauldrons",sourceType="world_drop",instructions="Drops from Haren Swifthoof (rare elite) in The Loch.",zone="The Loch",npc="Haren Swifthoof"},
+    [5319]={name="Bashing Pauldrons",sourceType="boss_drop",instructions="Drops from Haren Swifthoof in The Loch.",zone="The Loch",npc="Haren Swifthoof"},
     [5327]={name="Greasy Tinker's Pants",sourceType="quest_reward",instructions="Reward from the quest “The Escape” — pick it over the other choices. In The Barrens.",zone="The Barrens",questName="The Escape"},
     [5346]={name="Orcish Battle Bow",sourceType="quest_reward",instructions="Reward from the quest “Centaur Bracers” — pick it over the other choices. In The Barrens.",zone="The Barrens",questName="Centaur Bracers"},
     [5351]={name="Bounty Hunter's Ring",sourceType="quest_reward",instructions="Reward from the quest “Hezrul Bloodmark”. In The Barrens.",zone="The Barrens",questName="Hezrul Bloodmark"},

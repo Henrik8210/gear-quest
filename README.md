@@ -7,24 +7,22 @@ Click a gear slot on your character panel (right-click), browse from the log, or
 ## MVP (v0.1.0)
 
 - **Slots:** All gear slots (character panel right-click or log browse)
-- **Leveling data:** **Seven classes** with generated **10–69** BiS (Paladin, Warrior, Hunter, Druid, Shaman, Rogue, Priest) + Alliance **1–9** curated bands + Horde early bands where generated
-- **Level 70 endgame:** **27 specs** with curated data (21 AtlasLoot Phase 3 imports + 6 stand-in copies); **Hunter Marksmanship** still missing
+- **Leveling data:** **All nine classes** with generated **10–69** BiS + Alliance **1–9** curated bands + Horde early bands where generated
+- **Level 70 endgame:** **28 specs** with curated data (21 AtlasLoot Phase 3 imports + 6 stand-in copies + Hunter Marksmanship restored from BM)
 - **Specs:** All specs selectable from level 10 when data exists; per-class picker in the log
 - **Entry points:** character panel slot click, `/gq` log, minimap simulate panel
 - **Data:** curated entries in `GearQuest/Data.lua`; generated 10–69 merged at load via `DataAdapter.lua`
 
 ### Level 70 — Phase 3 BT/Hyjal
 
-Imported from **AtlasLootClassic_TBC_Phase_3_BT_Hyjal** for the original 21 specs. Six additional specs use stand-in copies (`scripts/clone-level70-specs.mjs`): Discipline, Frost, Affliction, Demonology, Assassination, Subtlety.
-
-**Gap:** Hunter **Marksmanship** — no level-70 curated band yet (BM/SV covered).
+Imported from **AtlasLootClassic_TBC_Phase_3_BT_Hyjal** for the original 21 specs. Six additional specs use stand-in copies (`scripts/clone-level70-specs.mjs`): Discipline, Frost, Affliction, Demonology, Assassination, Subtlety. Hunter **Marksmanship** @ 70 restored from Beast Mastery (`scripts/restore-marksmanship-l70.mjs`).
 
 ### Generated BiS (levels 10–69)
 
-Stat-weight pipeline for all seven classes. Level **70 is never generated** — curated data only. See [GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md](GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md) and [docs/DATA_RULES.md](docs/DATA_RULES.md).
+Stat-weight pipeline for **all nine classes**. Level **70 is never generated** — curated data only. Active lists and the Completed tab sort by pipeline rank (best BiS first). See [GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md](GearQuest/_generated/GEARQUEST-BIS-PIPELINE.md) and [docs/DATA_RULES.md](docs/DATA_RULES.md).
 
 ```powershell
-node scripts/verify-generated-bis.mjs   # expect 55,355 entries (1,439 curated + 53,916 generated)
+node scripts/verify-generated-bis.mjs   # expect 68,520 entries (1,487 curated + 67,033 generated)
 ```
 
 ## Commands

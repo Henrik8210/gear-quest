@@ -865,11 +865,9 @@ exactly those 41 items changed in `items.json`.
 
 ### Where Edgemaster's landed
 
-Rank 1 for arms and fury at 44–54, rank 2–3 at 55–58 behind *Backusarian Gauntlets*
-(ilvl 60 plate, 15 str / 15 sta / 9 hit), out of the top 3 at 59, back at rank 2 at 60
-where the guide places it. Henrik's repo carries a `fix-edgemaster-warrior.mjs` that
-pins it to rank 1 through 59 — that is now a judgement call about a close race rather
-than a correction of a bug.
+Rank 1 for arms and fury at 44–59 (from corrected hit/expertise weights in the
+pipeline), rank 2 at 60 behind Gauntlets of Annihilation. Protection never ranks it.
+No post-import patch — the model earns the placement.
 
 ---
 

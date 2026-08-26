@@ -74,6 +74,22 @@ local SOURCES = {
               shadow     = { shadow     = true } } },
   { class = "PRIEST",  picks = "priestEarly1to9",  facts = "priestEarly1to9Facts",
     hasSpec = false, factionInRow = true },
+
+  { class = "WARLOCK", picks = "warlockPicks",     facts = "warlockItemFacts",
+    hasSpec = true,
+    specs = { affliction  = { affliction  = true },
+              demonology  = { demonology  = true },
+              destruction = { destruction = true } } },
+  { class = "WARLOCK", picks = "warlockEarly1to9", facts = "warlockEarly1to9Facts",
+    hasSpec = false, factionInRow = true },
+
+  { class = "MAGE",    picks = "magePicks",        facts = "mageItemFacts",
+    hasSpec = true,
+    specs = { frost  = { frost  = true },
+              fire   = { fire   = true },
+              arcane = { arcane = true } } },
+  { class = "MAGE",    picks = "mageEarly1to9",    facts = "mageEarly1to9Facts",
+    hasSpec = false, factionInRow = true },
 }
 
 local CLASSTBL = {}
@@ -231,6 +247,7 @@ function GQ.Data:BuildSuffixLookup()
     local notableTables = {
         "paladinNotable", "warriorNotable", "hunterNotable",
         "druidNotable", "shamanNotable", "rogueNotable", "priestNotable",
+        "warlockNotable", "mageNotable",
     }
     for t = 1, #notableTables do
         local rows = self[notableTables[t]]

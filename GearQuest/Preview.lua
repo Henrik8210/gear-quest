@@ -103,6 +103,9 @@ function GQ.Preview:SetClass(classFile)
     end
     self:GetSettings().class = normalized
     self:SetEnabled(true)
+    if GQ.Data and GQ.Data.InvalidateClassCache then
+        GQ.Data:InvalidateClassCache()
+    end
     return true
 end
 
@@ -115,6 +118,9 @@ function GQ.Preview:SetLevel(level)
     level = math.floor(level)
     self:GetSettings().level = level
     self:SetEnabled(true)
+    if GQ.Data and GQ.Data.InvalidatePlayerBandCache then
+        GQ.Data:InvalidatePlayerBandCache()
+    end
     if GQ.CheckLevelMilestones then
         GQ:CheckLevelMilestones(previousLevel, level)
     end
@@ -128,6 +134,9 @@ function GQ.Preview:SetFaction(faction)
     end
     self:GetSettings().faction = normalized
     self:SetEnabled(true)
+    if GQ.Data and GQ.Data.InvalidatePlayerBandCache then
+        GQ.Data:InvalidatePlayerBandCache()
+    end
     return true
 end
 

@@ -84,14 +84,6 @@ function GQ.Compare:ScoreEntry(entry, equippedIlvl, slotName, maxPreferredIlvl)
     return upgradeDelta * 10 + sourceBonus + armorPenalty, itemIlvl
 end
 
--- Classes whose generated picks are fully stat-weighted in the pipeline; runtime
--- ilvl re-ranking would wrongly promote high-dps staves/wands over stat sticks.
-local PIPELINE_RANK_CLASSES = {
-    PRIEST = true,
-    MAGE = true,
-    WARLOCK = true,
-}
-
 function GQ.Compare:RankEntries(entries, slotName, maxResults)
     maxResults = maxResults or 3
     local equippedIlvl = self:GetEquippedItemLevel(slotName)
@@ -114,20 +106,14 @@ function GQ.Compare:RankEntries(entries, slotName, maxResults)
         table.insert(scored, { entry = entry, score = score, itemIlvl = itemIlvl })
     end
 
+    -- Every class is now fully stat-weighted in the pipeline, and every generated row
+    -- carries a rank computed from that spec's own weights. Runtime ilvl re-ranking
+    -- predates that and now fights it. If the pipeline ranked it, that rank is the answer.
     local function PrefersRank(entry)
         if not entry then
             return false
         end
-        if entry.origin == "guide" then
-            return true
-        end
-        if not entry.generated then
-            return true
-        end
-        if PIPELINE_RANK_CLASSES[classFile] then
-            return true
-        end
-        return false
+        return entry.curatedRank ~= nil
     end
 
     table.sort(scored, function(a, b)
@@ -136,8 +122,6 @@ function GQ.Compare:RankEntries(entries, slotName, maxResults)
         local aRanked = PrefersRank(a.entry)
         local bRanked = PrefersRank(b.entry)
 
-        -- Hand-curated and origin="guide" rows keep pipeline rank. Other generated
-        -- picks re-rank at runtime by upgrade score so ilvl beats stale slot order.
         if aRanked and bRanked then
             if rankA and rankB and rankA ~= rankB then
                 return rankA < rankB
