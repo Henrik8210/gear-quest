@@ -35,7 +35,8 @@ local function OpenUpgradeInLog(button)
         return
     end
 
-    local entryId = button.entry.id
+    local entry = button.entry
+    local entryId = entry.id
     local gq = _G.GearQuest
     if not gq or not gq.Log or not gq.Popup or not entryId then
         return
@@ -43,7 +44,7 @@ local function OpenUpgradeInLog(button)
 
     gq.Popup:Hide()
     gq.Log:Show()
-    gq.Log:SelectHunt(entryId, true)
+    gq.Log:SelectHunt(entryId, true, entry)
 end
 
 local function OnUpgradeIconClick(self, mouseButton)
@@ -359,8 +360,7 @@ function GQ.Popup:ShowForSlot(slotName, slotButton)
 
     slotName = GQ.Data:NormalizeSlotName(slotName)
     local slotLabel = GQ.Data:SlotLabel(slotName)
-    local candidates = GQ.Data:GetCandidatesForSlot(slotName)
-    local upgrades = select(1, GQ.Compare:RankEntries(candidates, slotName, MAX_OPTIONS))
+    local upgrades = GQ.Data:GetTopUpgradesForSlot(slotName, MAX_OPTIONS)
 
     if #upgrades == 0 then
         self:Hide()

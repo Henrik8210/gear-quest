@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.1.1-beta.3-bcc
+
+### Stat-based BiS reordering (sub-60)
+- **`Compare.lua`:** Re-rank generated sub-60 picks and notables using TBC stat priorities from Wowhead guides — spec-aware from level 10, `levelling_1_9` below that.
+- **`StatWeights.generated.lua`:** Generated weights for all nine classes/specs; wired via `scripts/generate-stat-weights-lua.mjs`.
+- Hit/crit/haste/expertise rating scoring; hunter gear AP scored at RAP weight; pet-tank classes (hunter/warlock) skip armor-class multiplier for DPS ranking.
+- Tooltip fallback parses equip stats (Hit/AP) when `GetItemStats` misses green lines.
+- Level 60 guide bands and level 70 curated lists are **not** reordered.
+
+### Hunter BiS fixes
+- Fixed legs ordering around L45–56 (Blackstorm vs Infernal Trickster vs Windrunner) by scoring hit and attack power, not raw Agi alone.
+
+### Profession craft skill (BoP only)
+- BoP crafted items show the correct recipe skill (e.g. Blackstorm Leggings → Leatherworking 260) from **`CraftSkills.generated.lua`** (Wowhead recipe spells).
+- BoE profession gear is unchanged — still buyable on the AH; log adds an AH note for BoE profession items.
+- **`scripts/generate-craft-skills.mjs`:** Build-time generator for craft skill lookup (item tooltips do not include recipe skill).
+
+### Source / drop labelling
+- **BRD Chest of The Seven** loot (Deathdealer Breastplate, Hammer of Grace, etc.) reclassified from generic `object_drop` to **`boss_drop`** — boss reward chest after the Seven encounter.
+- **`scripts/fix-brd-seven-chest.mjs`:** Data fix for Seven chest entries across generated class files.
+
 ## v0.1.0-beta.3
 
 - Fix CurseForge zip layout (`move-folders: GearQuest/GearQuest`).

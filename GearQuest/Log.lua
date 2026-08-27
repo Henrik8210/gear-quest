@@ -130,14 +130,14 @@ local function PrimeListEntryItemInfo(entry)
     end
 end
 
-local function BuildListItemTags(entry, status, includeNewLabel)
+local function BuildListItemTags(entry, status, includeNewLabel, slotName)
     local tags = ""
 
     if entry and entry.origin == "guide" then
         tags = tags .. " |cff88ccff(Guide)|r"
     end
 
-    if entry and entry.notable then
+    if entry and GQ.Data:ShouldDisplayAsNotable(entry, slotName or (entry and entry.slot)) then
         tags = tags .. " |cff88ccff(Notable)|r"
     end
 
@@ -152,8 +152,8 @@ local function BuildListItemTags(entry, status, includeNewLabel)
     return tags
 end
 
-local function FormatListItemText(fontString, name, entry, status, includeNewLabel, maxWidth, r, g, b)
-    local tags = BuildListItemTags(entry, status, includeNewLabel)
+local function FormatListItemText(fontString, name, entry, status, includeNewLabel, maxWidth, r, g, b, slotName)
+    local tags = BuildListItemTags(entry, status, includeNewLabel, slotName)
 
     fontString:SetText(tags)
     local tagsWidth = fontString:GetStringWidth() or 0
@@ -169,9 +169,9 @@ local function FormatListItemText(fontString, name, entry, status, includeNewLab
     return "|cff" .. hex .. truncatedName .. "|r" .. tags
 end
 
-local function SetListRowItemText(row, leftInset, name, entry, status, showNewLabel, r, g, b)
+local function SetListRowItemText(row, leftInset, name, entry, status, showNewLabel, r, g, b, slotName)
     local maxWidth = GetListRowTextMaxWidth(row, leftInset)
-    local text = FormatListItemText(row.text, name, entry, status, showNewLabel, maxWidth, r, g, b)
+    local text = FormatListItemText(row.text, name, entry, status, showNewLabel, maxWidth, r, g, b, slotName)
     row.text:SetText(text)
     row.text:SetTextColor(1, 1, 1)
 end
@@ -940,14 +940,13 @@ function GQ.Log:GetCompletedSlotListEntries(slotName)
         end
     end
 
-    -- Same ordering rule as the active list: best BiS first, least-best last. Rows with
-    -- no pipeline rank (notables) fall to the bottom via math.huge. Acquisition time
-    -- survives as the tiebreak between two rows of equal rank.
+    -- Best BiS first; acquisition time breaks ties between equal power.
+    local equippedIlvl = GQ.Compare:GetEquippedItemLevel(slotName)
     table.sort(results, function(a, b)
-        local rankA = a.entry.curatedRank or math.huge
-        local rankB = b.entry.curatedRank or math.huge
-        if rankA ~= rankB then
-            return rankA < rankB
+        local scoreA = GQ.Compare:GetSortScore(a.entry, slotName, equippedIlvl, 0)
+        local scoreB = GQ.Compare:GetSortScore(b.entry, slotName, equippedIlvl, 0)
+        if scoreA ~= scoreB then
+            return scoreA > scoreB
         end
         if a.completedAt ~= b.completedAt then
             return a.completedAt > b.completedAt
@@ -2330,7 +2329,7 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         row.text:ClearAllPoints()
         row.text:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
         row.text:SetPoint("RIGHT", row, "RIGHT", -LIST_ROW_RIGHT_PAD, 0)
-        SetListRowItemText(row, LIST_ROW_NOTABLE_LEFT, name, entry, status, false, r, g, b)
+        SetListRowItemText(row, LIST_ROW_NOTABLE_LEFT, name, entry, status, false, r, g, b, slotName)
 
         UpdateListRowHighlight(row)
         row:SetScript("OnClick", function()
@@ -2351,7 +2350,7 @@ function GQ.Log:ConfigureRow(row, yOffset, rowType, slotName, entry)
         row.text:SetPoint("RIGHT", row, "RIGHT", -LIST_ROW_RIGHT_PAD, 0)
 
         local showNewLabel = not onCompletedTab and not isObtained and status ~= "completed"
-        SetListRowItemText(row, LIST_ROW_ITEM_LEFT, name, entry, status, showNewLabel, r, g, b)
+        SetListRowItemText(row, LIST_ROW_ITEM_LEFT, name, entry, status, showNewLabel, r, g, b, slotName)
 
         UpdateListRowHighlight(row)
         row:SetScript("OnClick", function()
@@ -2391,7 +2390,14 @@ function GQ.Log:ScrollListToRow(layoutIndex)
 end
 
 function GQ.Log:BuildDetailLines(entry)
-    local lines = { entry.instructions }
+    if entry and entry.sourceType == "profession" and GQ.Data and GQ.Data.EnrichProfessionEntry then
+        GQ.Data:EnrichProfessionEntry(entry)
+    end
+
+    local lines = {
+        (GQ.Data and GQ.Data.GetProfessionInstructions and GQ.Data:GetProfessionInstructions(entry))
+            or entry.instructions,
+    }
 
     local suffixHint = GQ.Data:GetSuffixHint(entry)
     if suffixHint then
@@ -2402,7 +2408,7 @@ function GQ.Log:BuildDetailLines(entry)
         table.insert(lines, "\nWhy it's good: " .. entry.proc)
     end
 
-    if entry.notable then
+    if GQ.Data:ShouldDisplayAsNotable(entry, entry and entry.slot) and entry.proc then
         table.insert(lines, "\nWorth considering — the proc is the point.")
     end
 
@@ -2414,6 +2420,13 @@ function GQ.Log:BuildDetailLines(entry)
         local isBoE = GQ.Equip and GQ.Equip.IsBindOnEquip and GQ.Equip:IsBindOnEquip(entry.itemId)
         if isBoE then
             table.insert(lines, "\nAlso available on the Auction House (binds when equipped).")
+        end
+    end
+
+    if entry.sourceType == "profession" then
+        local isBoE = GQ.Equip and GQ.Equip.IsBindOnEquip and GQ.Equip:IsBindOnEquip(entry.itemId)
+        if isBoE then
+            table.insert(lines, "\nAlso available on the Auction House (crafted by others; binds when equipped).")
         end
     end
 
@@ -2568,7 +2581,7 @@ function GQ.Log:Refresh()
                     table.insert(layoutRows, { type = "empty", slotName = slotName })
                 else
                     for _, entry in ipairs(upgrades) do
-                        local rowType = entry.notable and "notable" or "item"
+                        local rowType = GQ.Data:ShouldDisplayAsNotable(entry, slotName) and "notable" or "item"
                         table.insert(layoutRows, { type = rowType, slotName = slotName, entry = entry })
                     end
                 end
@@ -2587,9 +2600,16 @@ function GQ.Log:Refresh()
         if not ok then
             print("|cffff0000GearQuest row error:|r " .. tostring(err))
         end
-        if self.selectedHuntId and spec.entry and spec.entry.id == self.selectedHuntId
-            and (spec.type == "item" or spec.type == "notable") then
-            selectedLayoutIndex = i
+        if self.selectedHuntId and spec.entry and (spec.type == "item" or spec.type == "notable") then
+            local selected = spec.entry.id == self.selectedHuntId
+            if not selected and self.selectedEntry then
+                local entryKey = GQ.Data:EntryListKey(spec.entry)
+                local selectedKey = GQ.Data:EntryListKey(self.selectedEntry)
+                selected = entryKey and selectedKey and entryKey == selectedKey
+            end
+            if selected then
+                selectedLayoutIndex = i
+            end
         end
         yOffset = yOffset + ROW_HEIGHT
         rowIndex = i
@@ -2613,8 +2633,17 @@ function GQ.Log:Refresh()
     LayoutDetailScroll(self.frame)
 
     if self.scrollListToSelected and selectedLayoutIndex then
-        self:ScrollListToRow(selectedLayoutIndex)
+        local layoutIndex = selectedLayoutIndex
         self.scrollListToSelected = false
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if self.frame and self.frame:IsShown() then
+                    self:ScrollListToRow(layoutIndex)
+                end
+            end)
+        else
+            self:ScrollListToRow(layoutIndex)
+        end
     end
 
     if self.selectedHuntId then

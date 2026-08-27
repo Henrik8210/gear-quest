@@ -1276,6 +1276,10 @@ function GQ.Indicator:UpdateTradeSkillFrame()
     end
 
     self:UpdateTradeSkillDetailIcon()
+
+    if GQ.Data and GQ.Data.CacheTradeSkillRecipes then
+        GQ.Data:CacheTradeSkillRecipes()
+    end
 end
 
 function GQ.Indicator:IsMerchantBuybackTab()

@@ -92,6 +92,16 @@ function GQ.Equip:IsBindOnEquip(itemId)
     return bindType == bindOnEquip
 end
 
+function GQ.Equip:IsBindOnPickup(itemId)
+    local bindType = self:GetItemBindType(itemId)
+    if bindType == nil then
+        return nil
+    end
+
+    local bindOnPickup = (Enum and Enum.ItemBind and Enum.ItemBind.OnAcquire) or 1
+    return bindType == bindOnPickup
+end
+
 function GQ.Equip:GetRequiredLevel(itemId)
     if not itemId then
         return 9999

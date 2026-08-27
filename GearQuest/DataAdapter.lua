@@ -94,6 +94,28 @@ local SOURCES = {
 
 local CLASSTBL = {}
 
+local function ExtractPipelineScore(r, src)
+    if src.hasSpec then
+        if type(r[5]) == "number" and type(r[8]) == "number" then
+            return r[8]
+        end
+    elseif type(r[6]) == "number" then
+        return r[6]
+    end
+    return nil
+end
+
+local function PipelineScoreKey(itemId, slot, minLevel, faction, spec)
+    return string.format(
+        "%d:%s:%d:%s:%s",
+        itemId or 0,
+        slot or "",
+        minLevel or 0,
+        tostring(faction),
+        tostring(spec)
+    )
+end
+
 local function Expand(src, data, out)
     local rows, facts = data[src.picks], data[src.facts]
     if not rows or not facts then return 0 end
@@ -124,6 +146,7 @@ local function Expand(src, data, out)
                 spec = nil
                 faction = src.factionInRow and r.faction or src.faction
             end
+            local pipelineScore = ExtractPipelineScore(r, src)
             out[#out + 1] = {
                 id           = prefix .. itemId .. ":" .. r[2] .. ":" .. r[3]
                                  .. ":" .. tostring(spec) .. ":" .. tostring(faction),
@@ -132,6 +155,7 @@ local function Expand(src, data, out)
                 minLevel     = r[3],
                 maxLevel     = r[4],
                 curatedRank  = rank,
+                pipelineScore = pipelineScore,
                 classes      = classes,
                 specs        = spec and src.specs and src.specs[spec] or nil,
                 factions     = faction and FACTION[faction] or nil,
@@ -151,6 +175,9 @@ local function Expand(src, data, out)
                 proc         = f.proc,
                 generated    = true,
             }
+            if pipelineScore and GQ.Data.RegisterPipelineScore then
+                GQ.Data:RegisterPipelineScore(itemId, r[2], r[3], faction, spec, pipelineScore)
+            end
             added = added + 1
         end
     end
@@ -161,6 +188,7 @@ function GQ.Data:LoadGenerated()
     if self._generatedLoaded then return 0 end
     self._generatedLoaded = true
     self.entries = self.entries or {}
+    self._pipelineScoreLookup = {}
     local n = 0
     for i = 1, #SOURCES do
         n = n + Expand(SOURCES[i], self, self.entries)
@@ -169,6 +197,8 @@ function GQ.Data:LoadGenerated()
     self:BuildSuffixLookup()
     for i = 1, #self.entries do
         self:EnrichEntrySuffix(self.entries[i])
+        self:EnrichBossChestEntry(self.entries[i])
+        self:EnrichProfessionEntry(self.entries[i])
     end
     return n
 end

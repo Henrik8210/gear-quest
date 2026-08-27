@@ -21516,6 +21516,226 @@ function GQ.Data:GetTooltipScanner()
     return self._tooltipScanner
 end
 
+-- Craft skill from item tooltip ("Leatherworking (260)"), not equip level req.
+local function StripTooltipText(text)
+    if not text or text == "" then
+        return ""
+    end
+    return text
+        :gsub("|c%x%x%x%x%x%x%x%x", "")
+        :gsub("|r", "")
+        :gsub("|A:.-|a", "")
+        :gsub("|T.-|t", "")
+        :gsub("^%s+", "")
+        :gsub("%s+$", "")
+end
+
+function GQ.Data:InvalidateCraftSkillCache(itemId)
+    if not itemId or not self._craftSkillCache then
+        return
+    end
+    self._craftSkillCache[itemId] = nil
+end
+
+-- BRD Chest of The Seven: boss reward chest after the Seven encounter, not a random world container.
+local BOSS_CHEST_SEVEN = {
+    sourceType = "boss_drop",
+    instructions = "Drops from the Chest of The Seven after defeating the Seven in Blackrock Depths.",
+    zone = "Blackrock Depths",
+    npc = "The Seven",
+}
+GQ.Data.BOSS_CHEST_SOURCES = {
+    [11921] = BOSS_CHEST_SEVEN,
+    [11923] = BOSS_CHEST_SEVEN,
+    [11925] = BOSS_CHEST_SEVEN,
+    [11926] = BOSS_CHEST_SEVEN,
+    [11927] = BOSS_CHEST_SEVEN,
+    [11929] = BOSS_CHEST_SEVEN,
+    [11945] = BOSS_CHEST_SEVEN,
+    [11946] = BOSS_CHEST_SEVEN,
+}
+
+function GQ.Data:EnrichBossChestEntry(entry)
+    if not entry or not entry.itemId then
+        return entry
+    end
+
+    local override = self.BOSS_CHEST_SOURCES and self.BOSS_CHEST_SOURCES[entry.itemId]
+    if not override then
+        return entry
+    end
+
+    entry.sourceType = override.sourceType
+    entry.instructions = override.instructions
+    entry.zone = override.zone
+    entry.npc = override.npc
+    return entry
+end
+
+function GQ.Data:CacheTradeSkillRecipes()
+    if not GetNumTradeSkills or not GetTradeSkillInfo or not GetTradeSkillItemLink then
+        return
+    end
+
+    self._craftSkillCache = self._craftSkillCache or {}
+    local num = GetNumTradeSkills()
+    for i = 1, num do
+        local _, skillType, _, _, skillLevel = GetTradeSkillInfo(i)
+        if skillType ~= "header" and skillLevel and skillLevel > 0 then
+            local link = GetTradeSkillItemLink(i)
+            local itemId = link and self:ItemLinkToId(link)
+            if itemId then
+                self._craftSkillCache[itemId] = skillLevel
+            end
+        end
+    end
+end
+
+function GQ.Data:LookupProfessionCraftSkill(itemId, profession)
+    if not itemId then
+        return nil
+    end
+
+    if GQ.CraftSkills and GQ.CraftSkills[itemId] and GQ.CraftSkills[itemId].skill then
+        return GQ.CraftSkills[itemId].skill
+    end
+
+    self._craftSkillCache = self._craftSkillCache or {}
+    local cached = self._craftSkillCache[itemId]
+    if cached and cached > 0 then
+        return cached
+    end
+
+    if GQ.Equip and GQ.Equip.PrimeItem then
+        GQ.Equip:PrimeItem(itemId)
+    else
+        GetItemInfo(itemId)
+    end
+
+    local itemLink = select(2, GetItemInfo(itemId))
+    if not itemLink then
+        return nil
+    end
+
+    local scanner = self:GetTooltipScanner()
+    scanner:SetOwner(UIParent, "ANCHOR_NONE")
+    scanner:ClearLines()
+    scanner:SetHyperlink(itemLink)
+    if scanner.Show then
+        scanner:Show()
+    end
+
+    local craftSkill
+    local scannerName = scanner:GetName()
+    for i = 1, scanner:NumLines() do
+        for _, suffix in ipairs({ "TextLeft", "TextRight" }) do
+            local line = _G[scannerName .. suffix .. i]
+            local text = StripTooltipText(line and line:GetText())
+            if text ~= "" then
+                if profession and text:find(profession, 1, true) then
+                    local skill = tonumber(text:match("%((%d+)%)"))
+                    if skill and skill > 0 then
+                        craftSkill = skill
+                        break
+                    end
+                end
+
+                local profName, skillText = text:match("([%a%s]+) %((%d+)%)")
+                local skill = skillText and tonumber(skillText)
+                if skill and skill > 0 then
+                    if not profession or not profName
+                        or profName:find(profession, 1, true)
+                        or profession:find(StripTooltipText(profName), 1, true) then
+                        craftSkill = skill
+                        break
+                    end
+                end
+            end
+        end
+        if craftSkill then
+            break
+        end
+    end
+
+    if scanner.Hide then
+        scanner:Hide()
+    end
+
+    if craftSkill and craftSkill > 0 then
+        self._craftSkillCache[itemId] = craftSkill
+    end
+
+    return craftSkill
+end
+
+function GQ.Data:GetProfessionInstructions(entry)
+    if not entry or entry.sourceType ~= "profession" then
+        return entry and entry.instructions
+    end
+
+    local instructions = entry.instructions or ""
+    local isBoP = GQ.Equip and GQ.Equip.IsBindOnPickup and GQ.Equip:IsBindOnPickup(entry.itemId)
+    -- BoE profession gear can be bought on the AH; only BoP must be self-crafted.
+    if isBoP == false then
+        return instructions
+    end
+
+    local craftSkill = self:LookupProfessionCraftSkill(entry.itemId, entry.profession)
+    if craftSkill and craftSkill > 0 then
+        local profession = entry.profession or "Profession"
+        return string.format("Crafted with %s (requires skill %d).", profession, craftSkill)
+    end
+
+    return instructions
+end
+
+function GQ.Data:EnsureProfessionCraftSkillListener()
+    if self._professionCraftSkillListener then
+        return
+    end
+
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    frame:SetScript("OnEvent", function(_, _, itemId)
+        if not itemId then
+            return
+        end
+
+        GQ.Data:InvalidateCraftSkillCache(itemId)
+
+        if GQ.Log and GQ.Log.frame and GQ.Log.frame:IsShown() then
+            local entry = GQ.Log.selectedEntry
+            if entry and entry.sourceType == "profession" and entry.itemId == itemId then
+                if GQ.Equip and GQ.Equip.IsBindOnPickup and GQ.Equip:IsBindOnPickup(itemId) then
+                    GQ.Data:EnrichProfessionEntry(entry)
+                    GQ.Log:ApplyEntryDetail(entry)
+                end
+            end
+        end
+    end)
+    self._professionCraftSkillListener = frame
+end
+
+function GQ.Data:EnrichProfessionEntry(entry)
+    if not entry or entry.sourceType ~= "profession" then
+        return entry
+    end
+
+    local isBoP = GQ.Equip and GQ.Equip.IsBindOnPickup and GQ.Equip:IsBindOnPickup(entry.itemId)
+    if isBoP == false then
+        return entry
+    end
+
+    self:EnsureProfessionCraftSkillListener()
+
+    local instructions = self:GetProfessionInstructions(entry)
+    if instructions then
+        entry.instructions = instructions
+    end
+
+    return entry
+end
+
 function GQ.Data:CacheOwnedSuffixItemLink(entry, link)
     if not entry or not link then
         return
@@ -22487,6 +22707,7 @@ function GQ.Data:BuildNotableEntry(row, facts, classFile)
         suffixChance = row.suffixChance,
         suffixId = row.suffixId,
         suffixRange = row.suffixRange,
+        pipelineScore = self:LookupPipelineScore(itemId, slot, minL, faction, spec),
         generated = true,
         notable = true,
     }
@@ -22498,8 +22719,53 @@ function GQ.Data:BuildNotableEntry(row, facts, classFile)
     end
 
     entry = self:EnrichEntrySuffix(entry)
+    entry = self:EnrichProfessionEntry(entry)
     self._notableEntryCache[entry.id] = entry
     return entry
+end
+
+function GQ.Data:AsMainBiSEntry(entry)
+    if not entry or not entry.notable then
+        return entry
+    end
+
+    local copy = {}
+    for key, value in pairs(entry) do
+        copy[key] = value
+    end
+    copy.notable = false
+    return copy
+end
+
+function GQ.Data:ShouldDisplayAsNotable(entry, slotName)
+    if not entry or not entry.notable then
+        return false
+    end
+
+    slotName = slotName and self:NormalizeSlotName(slotName)
+    if not slotName then
+        return true
+    end
+
+    local itemKey = self:EntryListKey(entry)
+    if not itemKey then
+        return true
+    end
+
+    for _, top in ipairs(self:GetTopUpgradesForSlot(slotName)) do
+        if self:EntryListKey(top) == itemKey then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function NormalizeEntryIdToken(value)
+    if value == nil or value == "" or value == "nil" then
+        return nil
+    end
+    return value
 end
 
 function GQ.Data:GetNotableEntryById(id)
@@ -22516,8 +22782,8 @@ function GQ.Data:GetNotableEntryById(id)
 
     itemId = tonumber(itemId)
     minL = tonumber(minL)
-    spec = spec ~= "" and spec or nil
-    faction = faction ~= "" and faction or nil
+    spec = NormalizeEntryIdToken(spec)
+    faction = NormalizeEntryIdToken(faction)
 
     local src = NOTABLE_CLASS[classFile]
     if not src then
@@ -22772,6 +23038,63 @@ function GQ.Data:GetMaxUpgradesForSlot(slotName)
     return 3
 end
 
+function GQ.Data:RegisterPipelineScore(itemId, slot, minLevel, faction, spec, score)
+    if not score then
+        return
+    end
+    self._pipelineScoreLookup = self._pipelineScoreLookup or {}
+    local key = string.format(
+        "%d:%s:%d:%s:%s",
+        itemId or 0,
+        slot or "",
+        minLevel or 0,
+        tostring(faction),
+        tostring(spec)
+    )
+    self._pipelineScoreLookup[key] = score
+end
+
+function GQ.Data:LookupPipelineScore(itemId, slot, minLevel, faction, spec)
+    if not self._pipelineScoreLookup then
+        return nil
+    end
+    local key = string.format(
+        "%d:%s:%d:%s:%s",
+        itemId or 0,
+        slot or "",
+        minLevel or 0,
+        tostring(faction),
+        tostring(spec)
+    )
+    return self._pipelineScoreLookup[key]
+end
+
+function GQ.Data:GetRankableEntriesForSlot(slotName)
+    slotName = self:NormalizeSlotName(slotName)
+    local merged = {}
+    local seen = {}
+
+    local function add(entry)
+        if not entry or not entry.id or seen[entry.id] then
+            return
+        end
+        seen[entry.id] = true
+        merged[#merged + 1] = entry
+    end
+
+    for _, entry in ipairs(self:GetCandidatesForSlot(slotName)) do
+        add(entry)
+    end
+
+    if (GQ:GetEffectiveLevel() or 1) < 70 then
+        for _, entry in ipairs(self:GetNotableForSlot(slotName)) do
+            add(entry)
+        end
+    end
+
+    return merged
+end
+
 function GQ.Data:GetTopUpgradesForSlot(slotName, maxResults)
     slotName = self:NormalizeSlotName(slotName)
     maxResults = maxResults or self:GetMaxUpgradesForSlot(slotName)
@@ -22783,8 +23106,12 @@ function GQ.Data:GetTopUpgradesForSlot(slotName, maxResults)
         return cached
     end
 
-    local candidates = self:GetCandidatesForSlot(slotName)
-    local results = GQ.Compare:RankEntries(candidates, slotName, maxResults)
+    local candidates = self:GetRankableEntriesForSlot(slotName)
+    local ranked = GQ.Compare:RankEntries(candidates, slotName, maxResults)
+    local results = {}
+    for i = 1, #ranked do
+        results[i] = self:AsMainBiSEntry(ranked[i])
+    end
     self._queryCache.topUpgrades[cacheKey] = results
     return results
 end

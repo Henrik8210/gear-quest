@@ -534,7 +534,11 @@ function GQ.Tracker:LayoutEntries(entries, descWordLimit)
         end
 
         local itemName = row.cachedItemName
-        local desc = FirstWords(entry.instructions, descWordLimit)
+        local instructions = entry.instructions
+        if entry.sourceType == "profession" and GQ.Data and GQ.Data.GetProfessionInstructions then
+            instructions = GQ.Data:GetProfessionInstructions(entry)
+        end
+        local desc = FirstWords(instructions, descWordLimit)
 
         row.name:SetText(itemName)
         row.desc:SetText(desc)
